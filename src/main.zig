@@ -6,10 +6,12 @@ const std = @import("std");
 const glfw = @import("zglfw");
 const gui = @import("zgui");
 const opengl = @import("zopengl");
+const gl = opengl.bindings;
 
 const tracy = @import("ztracy");
 
 const fonts = @import("fonts.zig");
+const gfx = @import("gfx.zig");
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -30,7 +32,10 @@ pub const State = struct {
     frame_time_index: usize = 0,
     frame_times_full: bool = true,
     fps: f32 = 60.0,
-    last_now : i64 = 0,
+    last_now: i64 = 0,
+
+    mesh: gfx.Mesh = undefined,
+    shader: gfx.Shader = undefined,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -70,10 +75,9 @@ pub fn main() !void {
     _ = state.main_window.setCursorPosCallback(on_mouse_move);
 
     try opengl.loadCoreProfile(glfw.getProcAddress, gl_major, gl_minor);
-    const gl = opengl.bindings;
 
     gl.debugMessageCallback(opengl_debug_message, null);
-    gl.enable(opengl.bindings.DEBUG_OUTPUT);
+    gl.enable(gl.DEBUG_OUTPUT);
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.debug.assert(gpa.deinit() == .ok);
@@ -91,17 +95,25 @@ pub fn main() !void {
 
     gui.getStyle().scaleAllSizes(2);
 
+    try create_mesh ();
+    defer state.mesh.deinit ();
+
     while (!state.main_window.shouldClose()) {
         tracy.FrameMark();
 
-        const dt = calculate_delta_time ();
+        const dt = calculate_delta_time();
         _ = dt;
 
         {
             const zone = tracy.ZoneNC(@src(), "gl.clearBufferfv", 0x00_80_80_80);
             defer zone.End();
             gl.clearBufferfv(gl.COLOR, 0, &[_]f32{ 0.2, 0.2, 0.2, 1 });
+            const fb_size = state.main_window.getFramebufferSize();
+            gl.viewport (0, 0, fb_size[0], fb_size[1]);
         }
+
+        state.shader.use ();
+        state.mesh.render ();
 
         draw_gui();
 
@@ -123,28 +135,25 @@ fn calculate_delta_time() f32 {
     const zone = tracy.ZoneNC(@src(), "calculate_delta_time", 0x00_ff_00_00);
     defer zone.End();
 
-    const now = std.time.microTimestamp ();
+    const now = std.time.microTimestamp();
     const delta = now - state.last_now;
     state.last_now = now;
 
-    const dt = @as (f32, @floatFromInt (delta)) / std.time.us_per_s;
+    const dt = @as(f32, @floatFromInt(delta)) / std.time.us_per_s;
 
     state.frame_times[state.frame_time_index] = delta;
     state.frame_time_index += 1;
-    if (state.frame_time_index == state.frame_times.len)
-    {
+    if (state.frame_time_index == state.frame_times.len) {
         state.frame_time_index = 0;
         state.frame_times_full = true;
     }
 
-    if (state.frame_times_full)
-    {
+    if (state.frame_times_full) {
         var total: i64 = 0;
-        for (0..state.frame_times.len) |i|
-        {
+        for (0..state.frame_times.len) |i| {
             total += state.frame_times[i];
         }
-        const average : f32 = @as (f32, @floatFromInt (total)) / state.frame_times.len / std.time.us_per_s;
+        const average: f32 = @as(f32, @floatFromInt(total)) / state.frame_times.len / std.time.us_per_s;
         state.fps = 1 / average;
     }
 
@@ -223,11 +232,11 @@ fn draw_fps() void {
     defer zone.End();
 
     if (state.show_fps) {
-        gui.setNextWindowSize (.{
+        gui.setNextWindowSize(.{
             .w = 200,
             .h = 50,
         });
-        gui.setNextWindowPos (.{
+        gui.setNextWindowPos(.{
             .x = 0,
             .y = 0,
         });
@@ -247,7 +256,7 @@ fn draw_fps() void {
         })) {
             gui.text("fps: {d:0.0}", .{state.fps});
         }
-        gui.end ();
+        gui.end();
     }
 }
 
@@ -351,11 +360,11 @@ fn on_mouse_move(window: *glfw.Window, x: f64, y: f64) callconv(.C) void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn opengl_debug_message(
-    source: opengl.bindings.Enum,
-    kind: opengl.bindings.Enum,
-    id: opengl.bindings.Enum,
-    severity: opengl.bindings.Enum,
-    len: opengl.bindings.Sizei,
+    source: gl.Enum,
+    kind: gl.Enum,
+    id: gl.Enum,
+    severity: gl.Enum,
+    len: gl.Sizei,
     message: [*c]const u8,
     user: *const anyopaque,
 ) callconv(.C) void {
@@ -366,17 +375,17 @@ fn opengl_debug_message(
 
     const slice: []const u8 = message[0..@intCast(len)];
 
-    const block = std.fmt.allocPrint (state.allocator, "{} {} {} {} {s}", .{
+    const block = std.fmt.allocPrint(state.allocator, "{} {} {} {} {s}", .{
         source,
         kind,
         id,
         severity,
         slice,
     }) catch return;
-    defer state.allocator.free (block);
+    defer state.allocator.free(block);
 
-    std.debug.print ("{s}\n", .{block});
-    tracy.Message (block);
+    std.debug.print("{s}\n", .{block});
+    tracy.Message(block);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -446,6 +455,30 @@ const TracyAllocator = struct {
         tracy.Free(buf.ptr);
     }
 };
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+const shader_source = @embedFile ("shader.glsl");
+
+fn create_mesh () !void
+{
+    state.mesh = try gfx.Mesh.init (state.allocator);
+    errdefer state.mesh.deinit ();
+
+    {
+        const v1 = try state.mesh.addVertex (.{ .pos = .{ .x = -0.5, .y = -0.5, .z = 0}});
+        const v2 = try state.mesh.addVertex (.{ .pos = .{ .x = 0, .y = 0.5, .z = 0}});
+        const v3 = try state.mesh.addVertex (.{ .pos = .{ .x = 0.5, .y = -0.5, .z = 0}});
+        try state.mesh.addIndex (v1);
+        try state.mesh.addIndex (v2);
+        try state.mesh.addIndex (v3);
+    }
+
+    state.shader = try gfx.Shader.init (state.allocator, shader_source);
+    errdefer state.shader.deinit ();
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
