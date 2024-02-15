@@ -1,0 +1,12 @@
+.{
+    .name = "City",
+    .version = "0.0.0",
+    .dependencies = .{
+        .system_sdk = .{ .path = "zig-gamedev/libs/system-sdk" },
+        .zglfw = .{ .path = "zig-gamedev/libs/zglfw" },
+        .zgui = .{ .path = "zig-gamedev/libs/zgui" },
+        .zopengl = .{ .path = "zig-gamedev/libs/zopengl" },
+        .ztracy = .{ .path = "zig-gamedev/libs/ztracy" },
+    },
+    .paths = .{ "", },
+}
