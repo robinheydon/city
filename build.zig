@@ -1,8 +1,9 @@
 const std = @import("std");
 
 const zglfw = @import ("zglfw");
-const zopengl = @import ("zopengl");
 const zgui = @import ("zgui");
+const zmath = @import ("zmath");
+const zopengl = @import ("zopengl");
 const ztracy = @import ("ztracy");
 
 pub fn build(b: *std.Build) void {
@@ -23,6 +24,7 @@ pub fn build(b: *std.Build) void {
             },
         }
     );
+    const zmath_pkg = zmath.package (b, target, optimize, .{});
     const zopengl_pkg = zopengl.package (b, target, optimize, .{});
     const ztracy_pkg = ztracy.package (b, target, optimize, .{
         .options = .{
@@ -31,8 +33,9 @@ pub fn build(b: *std.Build) void {
     });
 
     zglfw_pkg.link (exe);
-    zopengl_pkg.link (exe);
     zgui_pkg.link (exe);
+    zmath_pkg.link (exe);
+    zopengl_pkg.link (exe);
     ztracy_pkg.link (exe);
 
     b.installArtifact(exe);

@@ -7,7 +7,7 @@ const glfw = @import("zglfw");
 const gui = @import("zgui");
 const opengl = @import("zopengl");
 const gl = opengl.bindings;
-
+const math = @import("zmath");
 const tracy = @import("ztracy");
 
 const fonts = @import("fonts.zig");
@@ -23,6 +23,8 @@ pub const State = struct {
 
     show_debug: bool = false,
     show_fps: bool = true,
+    show_terrain: bool = true,
+    show_axes: bool = true,
 
     gui_capture_mouse: bool = false,
     gui_capture_keyboard: bool = false,
@@ -33,9 +35,17 @@ pub const State = struct {
     frame_times_full: bool = true,
     fps: f32 = 60.0,
     last_now: i64 = 0,
+    now: f64 = 0,
 
-    mesh: gfx.Mesh = undefined,
-    shader: gfx.Shader = undefined,
+    width: i32 = undefined,
+    height: i32 = undefined,
+
+    terrain: gfx.Mesh = undefined,
+    axes: gfx.Mesh = undefined,
+
+    basic_shader: gfx.Shader = undefined,
+
+    main_camera : gfx.Camera = .{},
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -95,25 +105,41 @@ pub fn main() !void {
 
     gui.getStyle().scaleAllSizes(2);
 
-    try create_mesh ();
-    defer state.mesh.deinit ();
+    try create_shaders();
+
+    try create_mesh();
+    defer state.terrain.deinit();
+
+    try create_axes();
+    defer state.axes.deinit();
+
+    // gl.enable (gl.CULL_FACE);
+    // gl.cullFace (gl.BACK);
+    // gl.frontFace (gl.CW);
+    gl.disable (gl.CULL_FACE);
+    gl.disable (gl.DEPTH_TEST);
 
     while (!state.main_window.shouldClose()) {
         tracy.FrameMark();
 
-        const dt = calculate_delta_time();
+        const fb_size = state.main_window.getFramebufferSize();
+        state.width = fb_size[0];
+        state.height = fb_size[1];
+
+        const dt = update_delta_time();
         _ = dt;
 
         {
             const zone = tracy.ZoneNC(@src(), "gl.clearBufferfv", 0x00_80_80_80);
             defer zone.End();
-            gl.clearBufferfv(gl.COLOR, 0, &[_]f32{ 0.2, 0.2, 0.2, 1 });
-            const fb_size = state.main_window.getFramebufferSize();
-            gl.viewport (0, 0, fb_size[0], fb_size[1]);
+            gl.clearBufferfv(gl.COLOR, 0, &[_]f32{ 0.05, 0.05, 0.05, 1 });
+            gl.viewport(0, 0, state.width, state.height);
         }
 
-        state.shader.use ();
-        state.mesh.render ();
+        begin_3d ();
+
+        draw_axes();
+        draw_terrain();
 
         draw_gui();
 
@@ -131,13 +157,15 @@ pub fn main() !void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn calculate_delta_time() f32 {
-    const zone = tracy.ZoneNC(@src(), "calculate_delta_time", 0x00_ff_00_00);
+fn update_delta_time() f32 {
+    const zone = tracy.ZoneNC(@src(), "update_delta_time", 0x00_ff_00_00);
     defer zone.End();
 
     const now = std.time.microTimestamp();
     const delta = now - state.last_now;
     state.last_now = now;
+
+    state.now = @as(f64, @floatFromInt(now)) / std.time.us_per_s;
 
     const dt = @as(f32, @floatFromInt(delta)) / std.time.us_per_s;
 
@@ -315,6 +343,10 @@ fn on_key(window: *glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Actio
         state.show_debug = !state.show_debug;
     } else if (key == .F2 and action == .press and mod == 0) {
         state.show_fps = !state.show_fps;
+    } else if (key == .F3 and action == .press and mod == 0) {
+        state.show_terrain = !state.show_terrain;
+    } else if (key == .F4 and action == .press and mod == 0) {
+        state.show_axes = !state.show_axes;
     }
 }
 
@@ -460,24 +492,219 @@ const TracyAllocator = struct {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-const shader_source = @embedFile ("shader.glsl");
+const shader_source = @embedFile("shader.glsl");
 
-fn create_mesh () !void
+fn create_shaders () !void
 {
-    state.mesh = try gfx.Mesh.init (state.allocator);
-    errdefer state.mesh.deinit ();
+    state.basic_shader = try gfx.Shader.init(state.allocator, shader_source);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+fn create_mesh() !void {
+    state.terrain = try gfx.Mesh.init(state.allocator, .triangles);
+    errdefer state.terrain.deinit();
 
     {
-        const v1 = try state.mesh.addVertex (.{ .pos = .{ .x = -0.5, .y = -0.5, .z = 0}});
-        const v2 = try state.mesh.addVertex (.{ .pos = .{ .x = 0, .y = 0.5, .z = 0}});
-        const v3 = try state.mesh.addVertex (.{ .pos = .{ .x = 0.5, .y = -0.5, .z = 0}});
-        try state.mesh.addIndex (v1);
-        try state.mesh.addIndex (v2);
-        try state.mesh.addIndex (v3);
+        const v1 = try state.terrain.addVertex(.{
+            .pos = .{ .x = -1.0, .y = 1.0, .z = 0 },
+            .col = .{ .r = 1, .g = 0, .b = 0 },
+        });
+        const v2 = try state.terrain.addVertex(.{
+            .pos = .{ .x = 1.0, .y = 1.0, .z = 0 },
+            .col = .{ .r = 0, .g = 1, .b = 0 },
+        });
+        const v3 = try state.terrain.addVertex(.{
+            .pos = .{ .x = -1.0, .y = -1.0, .z = 0 },
+            .col = .{ .r = 0, .g = 0, .b = 1 },
+        });
+        const v4 = try state.terrain.addVertex(.{
+            .pos = .{ .x = 1.0, .y = -1.0, .z = 0 },
+            .col = .{ .r = 0, .g = 1, .b = 1 },
+        });
+        try state.terrain.addIndex(v1);
+        try state.terrain.addIndex(v2);
+        try state.terrain.addIndex(v3);
+        try state.terrain.addIndex(v3);
+        try state.terrain.addIndex(v2);
+        try state.terrain.addIndex(v4);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+fn create_axes() !void {
+    state.axes = try gfx.Mesh.init(state.allocator, .lines);
+    errdefer state.axes.deinit();
+
+    {
+        const v1 = try state.axes.addVertex(.{
+            .pos = .{ .x = -1000, .y = 0, .z = 0 },
+            .col = .{ .r = 1, .g = 1, .b = 0 },
+        });
+        const v2 = try state.axes.addVertex(.{
+            .pos = .{ .x = 1000, .y = 0, .z = 0 },
+            .col = .{ .r = 1, .g = 1, .b = 0 },
+        });
+        const v3 = try state.axes.addVertex(.{
+            .pos = .{ .x = 0, .y = -2000, .z = 0 },
+            .col = .{ .r = 1, .g = 0, .b = 1 },
+        });
+        const v4 = try state.axes.addVertex(.{
+            .pos = .{ .x = 0, .y = 2000, .z = 0 },
+            .col = .{ .r = 1, .g = 0, .b = 1 },
+        });
+        const v5 = try state.axes.addVertex(.{
+            .pos = .{ .x = 0, .y = 0, .z = -2000 },
+            .col = .{ .r = 0, .g = 1, .b = 1 },
+        });
+        const v6 = try state.axes.addVertex(.{
+            .pos = .{ .x = 0, .y = 0, .z = 2000 },
+            .col = .{ .r = 0, .g = 1, .b = 1 },
+        });
+        try state.axes.addIndex(v1);
+        try state.axes.addIndex(v2);
+        try state.axes.addIndex(v3);
+        try state.axes.addIndex(v4);
+        try state.axes.addIndex(v5);
+        try state.axes.addIndex(v6);
     }
 
-    state.shader = try gfx.Shader.init (state.allocator, shader_source);
-    errdefer state.shader.deinit ();
+    for (1..100) |i|
+    {
+        const f : f32 = @floatFromInt (i);
+
+        const v1 = try state.axes.addVertex (.{
+            .pos = .{ .x = f / 10, .y = -1000, .z = 0 },
+            .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
+        });
+        const v2 = try state.axes.addVertex (.{
+            .pos = .{ .x = f / 10, .y = 1000, .z = 0 },
+            .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
+        });
+        try state.axes.addIndex(v1);
+        try state.axes.addIndex(v2);
+
+        const v3 = try state.axes.addVertex (.{
+            .pos = .{ .x = -f / 10, .y = -1000, .z = 0 },
+            .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
+        });
+        const v4 = try state.axes.addVertex (.{
+            .pos = .{ .x = -f / 10, .y = 1000, .z = 0 },
+            .col = .{ .r = 0.5, .g = 0.8, .b = 0.5 },
+        });
+        try state.axes.addIndex(v3);
+        try state.axes.addIndex(v4);
+
+        const v5 = try state.axes.addVertex (.{
+            .pos = .{ .x = -1000, .y = f / 10, .z = 0 },
+            .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
+        });
+        const v6 = try state.axes.addVertex (.{
+            .pos = .{ .x = 1000, .y = f / 10, .z = 0 },
+            .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
+        });
+        try state.axes.addIndex(v5);
+        try state.axes.addIndex(v6);
+
+        const v7 = try state.axes.addVertex (.{
+            .pos = .{ .x = -1000, .y = -f / 10, .z = 0 },
+            .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
+        });
+        const v8 = try state.axes.addVertex (.{
+            .pos = .{ .x = 1000, .y = -f / 10, .z = 0 },
+            .col = .{ .r = 0.5, .g = 0.8, .b = 0.5 },
+        });
+        try state.axes.addIndex(v7);
+        try state.axes.addIndex(v8);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+fn begin_3d () void
+{
+    const zone = tracy.ZoneNC(@src(), "begin_3d", 0x00_ff_00_00);
+    defer zone.End();
+
+    state.basic_shader.use();
+    defer state.basic_shader.end ();
+
+    const width : f32 = @floatFromInt (state.width);
+    const height : f32 = @floatFromInt (state.height);
+
+    const aspect = height / width;
+
+    const model = math.identity ();
+    std.debug.print ("model: {any}\n", .{model});
+
+    const view = math.lookAtLh (
+        math.f32x4 (state.main_camera.position[0], state.main_camera.position[1], state.main_camera.position[2], 1),
+        math.f32x4 (state.main_camera.target[0], state.main_camera.target[1], state.main_camera.target[2], 1),
+        math.f32x4 (state.main_camera.up[0], state.main_camera.up[1], state.main_camera.up[2], 0),
+    );
+    std.debug.print ("view: {any}\n", .{view});
+
+    // const projection = math.identity (); _ = aspect;
+    const projection = math.perspectiveFovLhGl (0.5 * std.math.pi, aspect, 0.1, 100);
+
+    std.debug.print ("proj: {any}\n", .{projection});
+
+    const model_view = math.mul (model, view);
+    const model_view_projection = math.mul (model_view, projection);
+
+    std.debug.print ("mvp: {any}\n", .{model_view_projection});
+
+    const p0 = math.F32x4 {0, 0, 0, 1};
+    std.debug.print ("p0: {any}\n", .{math.mul (model_view_projection, p0)});
+
+    const p1 = math.F32x4 {1, 0, 0, 1};
+    std.debug.print ("p1: {any}\n", .{math.mul (model_view_projection, p1)});
+
+    const p2 = math.F32x4 {0, 1, 0, 1};
+    std.debug.print ("p2: {any}\n", .{math.mul (model_view_projection, p2)});
+
+    state.basic_shader.setUniformMat("model", model);
+    state.basic_shader.setUniformMat("view", view);
+    state.basic_shader.setUniformMat("projection", projection);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+fn draw_axes() void {
+    const zone = tracy.ZoneNC(@src(), "draw_axes", 0x00_ff_00_00);
+    defer zone.End();
+
+    if (state.show_axes)
+    {
+        state.basic_shader.use();
+        defer state.basic_shader.end ();
+        state.axes.render();
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+fn draw_terrain() void {
+    const zone = tracy.ZoneNC(@src(), "draw_terrain", 0x00_ff_00_00);
+    defer zone.End();
+
+    if (state.show_terrain)
+    {
+        state.basic_shader.use();
+        defer state.basic_shader.end ();
+        state.terrain.render();
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

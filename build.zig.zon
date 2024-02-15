@@ -5,6 +5,7 @@
         .system_sdk = .{ .path = "zig-gamedev/libs/system-sdk" },
         .zglfw = .{ .path = "zig-gamedev/libs/zglfw" },
         .zgui = .{ .path = "zig-gamedev/libs/zgui" },
+        .zmath = .{ .path = "zig-gamedev/libs/zmath" },
         .zopengl = .{ .path = "zig-gamedev/libs/zopengl" },
         .ztracy = .{ .path = "zig-gamedev/libs/ztracy" },
     },
