@@ -45,7 +45,7 @@ pub const State = struct {
 
     basic_shader: gfx.Shader = undefined,
 
-    main_camera : gfx.Camera = .{},
+    main_camera: gfx.Camera = .{},
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -116,8 +116,8 @@ pub fn main() !void {
     // gl.enable (gl.CULL_FACE);
     // gl.cullFace (gl.BACK);
     // gl.frontFace (gl.CW);
-    gl.disable (gl.CULL_FACE);
-    gl.disable (gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
+    gl.disable(gl.DEPTH_TEST);
 
     while (!state.main_window.shouldClose()) {
         tracy.FrameMark();
@@ -136,7 +136,7 @@ pub fn main() !void {
             gl.viewport(0, 0, state.width, state.height);
         }
 
-        begin_3d ();
+        begin_3d();
 
         draw_axes();
         draw_terrain();
@@ -494,8 +494,7 @@ const TracyAllocator = struct {
 
 const shader_source = @embedFile("shader.glsl");
 
-fn create_shaders () !void
-{
+fn create_shaders() !void {
     state.basic_shader = try gfx.Shader.init(state.allocator, shader_source);
 }
 
@@ -574,48 +573,47 @@ fn create_axes() !void {
         try state.axes.addIndex(v6);
     }
 
-    for (1..100) |i|
-    {
-        const f : f32 = @floatFromInt (i);
+    for (1..100) |i| {
+        const f: f32 = @floatFromInt(i);
 
-        const v1 = try state.axes.addVertex (.{
+        const v1 = try state.axes.addVertex(.{
             .pos = .{ .x = f / 10, .y = -1000, .z = 0 },
             .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
         });
-        const v2 = try state.axes.addVertex (.{
+        const v2 = try state.axes.addVertex(.{
             .pos = .{ .x = f / 10, .y = 1000, .z = 0 },
             .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
         });
         try state.axes.addIndex(v1);
         try state.axes.addIndex(v2);
 
-        const v3 = try state.axes.addVertex (.{
+        const v3 = try state.axes.addVertex(.{
             .pos = .{ .x = -f / 10, .y = -1000, .z = 0 },
             .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
         });
-        const v4 = try state.axes.addVertex (.{
+        const v4 = try state.axes.addVertex(.{
             .pos = .{ .x = -f / 10, .y = 1000, .z = 0 },
             .col = .{ .r = 0.5, .g = 0.8, .b = 0.5 },
         });
         try state.axes.addIndex(v3);
         try state.axes.addIndex(v4);
 
-        const v5 = try state.axes.addVertex (.{
+        const v5 = try state.axes.addVertex(.{
             .pos = .{ .x = -1000, .y = f / 10, .z = 0 },
             .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
         });
-        const v6 = try state.axes.addVertex (.{
+        const v6 = try state.axes.addVertex(.{
             .pos = .{ .x = 1000, .y = f / 10, .z = 0 },
             .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
         });
         try state.axes.addIndex(v5);
         try state.axes.addIndex(v6);
 
-        const v7 = try state.axes.addVertex (.{
+        const v7 = try state.axes.addVertex(.{
             .pos = .{ .x = -1000, .y = -f / 10, .z = 0 },
             .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
         });
-        const v8 = try state.axes.addVertex (.{
+        const v8 = try state.axes.addVertex(.{
             .pos = .{ .x = 1000, .y = -f / 10, .z = 0 },
             .col = .{ .r = 0.5, .g = 0.8, .b = 0.5 },
         });
@@ -628,47 +626,46 @@ fn create_axes() !void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn begin_3d () void
-{
+fn begin_3d() void {
     const zone = tracy.ZoneNC(@src(), "begin_3d", 0x00_ff_00_00);
     defer zone.End();
 
     state.basic_shader.use();
-    defer state.basic_shader.end ();
+    defer state.basic_shader.end();
 
-    const width : f32 = @floatFromInt (state.width);
-    const height : f32 = @floatFromInt (state.height);
+    const width: f32 = @floatFromInt(state.width);
+    const height: f32 = @floatFromInt(state.height);
 
     const aspect = height / width;
 
-    const model = math.identity ();
-    std.debug.print ("model: {any}\n", .{model});
+    const model = math.identity();
+    std.debug.print("model: {any}\n", .{model});
 
-    const view = math.lookAtLh (
-        math.f32x4 (state.main_camera.position[0], state.main_camera.position[1], state.main_camera.position[2], 1),
-        math.f32x4 (state.main_camera.target[0], state.main_camera.target[1], state.main_camera.target[2], 1),
-        math.f32x4 (state.main_camera.up[0], state.main_camera.up[1], state.main_camera.up[2], 0),
+    const view = math.lookAtLh(
+        math.f32x4(state.main_camera.position[0], state.main_camera.position[1], state.main_camera.position[2], 1),
+        math.f32x4(state.main_camera.target[0], state.main_camera.target[1], state.main_camera.target[2], 1),
+        math.f32x4(state.main_camera.up[0], state.main_camera.up[1], state.main_camera.up[2], 0),
     );
-    std.debug.print ("view: {any}\n", .{view});
+    std.debug.print("view: {any}\n", .{view});
 
     // const projection = math.identity (); _ = aspect;
-    const projection = math.perspectiveFovLhGl (0.5 * std.math.pi, aspect, 0.1, 100);
+    const projection = math.perspectiveFovLhGl(0.5 * std.math.pi, aspect, 0.1, 100);
 
-    std.debug.print ("proj: {any}\n", .{projection});
+    std.debug.print("proj: {any}\n", .{projection});
 
-    const model_view = math.mul (model, view);
-    const model_view_projection = math.mul (model_view, projection);
+    const model_view = math.mul(model, view);
+    const model_view_projection = math.mul(model_view, projection);
 
-    std.debug.print ("mvp: {any}\n", .{model_view_projection});
+    std.debug.print("mvp: {any}\n", .{model_view_projection});
 
-    const p0 = math.F32x4 {0, 0, 0, 1};
-    std.debug.print ("p0: {any}\n", .{math.mul (model_view_projection, p0)});
+    const p0 = math.F32x4{ 0, 0, 0, 1 };
+    std.debug.print("p0: {any}\n", .{math.mul(model_view_projection, p0)});
 
-    const p1 = math.F32x4 {1, 0, 0, 1};
-    std.debug.print ("p1: {any}\n", .{math.mul (model_view_projection, p1)});
+    const p1 = math.F32x4{ 1, 0, 0, 1 };
+    std.debug.print("p1: {any}\n", .{math.mul(model_view_projection, p1)});
 
-    const p2 = math.F32x4 {0, 1, 0, 1};
-    std.debug.print ("p2: {any}\n", .{math.mul (model_view_projection, p2)});
+    const p2 = math.F32x4{ 0, 1, 0, 1 };
+    std.debug.print("p2: {any}\n", .{math.mul(model_view_projection, p2)});
 
     state.basic_shader.setUniformMat("model", model);
     state.basic_shader.setUniformMat("view", view);
@@ -683,10 +680,9 @@ fn draw_axes() void {
     const zone = tracy.ZoneNC(@src(), "draw_axes", 0x00_ff_00_00);
     defer zone.End();
 
-    if (state.show_axes)
-    {
+    if (state.show_axes) {
         state.basic_shader.use();
-        defer state.basic_shader.end ();
+        defer state.basic_shader.end();
         state.axes.render();
     }
 }
@@ -699,10 +695,9 @@ fn draw_terrain() void {
     const zone = tracy.ZoneNC(@src(), "draw_terrain", 0x00_ff_00_00);
     defer zone.End();
 
-    if (state.show_terrain)
-    {
+    if (state.show_terrain) {
         state.basic_shader.use();
-        defer state.basic_shader.end ();
+        defer state.basic_shader.end();
         state.terrain.render();
     }
 }

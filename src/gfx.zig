@@ -38,9 +38,9 @@ pub const Projection = enum {
 };
 
 pub const Camera = struct {
-    position: [3]f32 = [3]f32 {50, 100, 200},
-    target: [3]f32 = [3]f32 {0, 0, 0},
-    up: [3]f32 = [3]f32 {0, 1, 0},
+    position: [3]f32 = [3]f32{ 50, 100, 200 },
+    target: [3]f32 = [3]f32{ 0, 0, 0 },
+    up: [3]f32 = [3]f32{ 0, 1, 0 },
     fovy: f32 = 90,
     projection: Projection = .perspective,
 };
@@ -102,8 +102,7 @@ pub const Mesh = struct {
 
         gl.bindVertexArray(0);
 
-        const gl_primative = switch (primative)
-        {
+        const gl_primative = switch (primative) {
             .lines => gl.LINES,
             .triangles => gl.TRIANGLES,
         };
@@ -270,7 +269,9 @@ pub const Shader = struct {
         const zone = tracy.ZoneNC(@src(), "shader.setUniform3f", 0x00_80_80_80);
         defer zone.End();
         const location = gl.getUniformLocation(self.id, name);
-        if (location == -1) { std.debug.print ("Unknown uniform {s}\n", .{name}); }
+        if (location == -1) {
+            std.debug.print("Unknown uniform {s}\n", .{name});
+        }
         gl.uniform3f(location, value[0], value[1], value[2]);
     }
 
@@ -278,7 +279,9 @@ pub const Shader = struct {
         const zone = tracy.ZoneNC(@src(), "shader.setUniform4f", 0x00_80_80_80);
         defer zone.End();
         const location = gl.getUniformLocation(self.id, name);
-        if (location == -1) { std.debug.print ("Unknown uniform {s}\n", .{name}); }
+        if (location == -1) {
+            std.debug.print("Unknown uniform {s}\n", .{name});
+        }
         gl.uniform4f(location, value[0], value[1], value[2], value[3]);
     }
 
@@ -286,8 +289,10 @@ pub const Shader = struct {
         const zone = tracy.ZoneNC(@src(), "shader.setUniformMat", 0x00_80_80_80);
         defer zone.End();
         const location = gl.getUniformLocation(self.id, name);
-        if (location == -1) { std.debug.print ("Unknown uniform {s}\n", .{name}); }
-        gl.uniformMatrix4fv(location, 1, gl.TRUE, math.arrNPtr (&value));
+        if (location == -1) {
+            std.debug.print("Unknown uniform {s}\n", .{name});
+        }
+        gl.uniformMatrix4fv(location, 1, gl.TRUE, math.arrNPtr(&value));
     }
 };
 
