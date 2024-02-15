@@ -26,7 +26,7 @@ pub const State = struct {
     gui_capture_keyboard: bool = false,
     gui_capture_text: bool = false,
 
-    frame_times: [32]i64 = undefined,
+    frame_times: [8]i64 = undefined,
     frame_time_index: usize = 0,
     frame_times_full: bool = true,
     fps: f32 = 60.0,

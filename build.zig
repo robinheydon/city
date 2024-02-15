@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) void {
     const zopengl_pkg = zopengl.package (b, target, optimize, .{});
     const ztracy_pkg = ztracy.package (b, target, optimize, .{
         .options = .{
-            .enable_ztracy = false,
+            .enable_ztracy = true,
         },
     });
 
