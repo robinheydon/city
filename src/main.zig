@@ -24,8 +24,9 @@ pub const State = struct {
     show_debug: bool = false,
     show_fps: bool = true,
     show_terrain: bool = true,
-    show_axes: bool = true,
+    show_axes: bool = false,
     show_cube: bool = true,
+    show_proj: bool = true,
 
     gui_capture_mouse: bool = false,
     gui_capture_keyboard: bool = false,
@@ -86,7 +87,7 @@ pub fn main() !void {
     glfw.windowHintTyped(.depth_bits, 24);
     glfw.windowHintTyped(.doublebuffer, true);
 
-    state.main_window = try glfw.Window.create(1280, 720, "City", null);
+    state.main_window = try glfw.Window.create(1920, 1080, "City", null);
     defer state.main_window.destroy();
 
     glfw.makeContextCurrent(state.main_window);
@@ -373,6 +374,8 @@ fn on_key(window: *glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Actio
         state.show_axes = !state.show_axes;
     } else if (key == .F5 and action == .press and mod == 0) {
         state.show_cube = !state.show_cube;
+    } else if (key == .F6 and action == .press and mod == 0) {
+        state.show_proj = !state.show_proj;
     }
 }
 
@@ -534,26 +537,26 @@ fn create_mesh() !void {
 
     {
         const v1 = try state.terrain.addVertex(.{
-            .pos = .{ .x = -1.0, .y = 0, .z = 1.0 },
+            .pos = .{ .x = -1.0, .y = 1.0, .z = 0 },
             .col = .{ .r = 1, .g = 0, .b = 0 },
         });
         const v2 = try state.terrain.addVertex(.{
-            .pos = .{ .x = 1.0, .y = 0, .z = 1.0 },
+            .pos = .{ .x = 1.0, .y = 1.0, .z = 0 },
             .col = .{ .r = 0, .g = 1, .b = 0 },
         });
         const v3 = try state.terrain.addVertex(.{
-            .pos = .{ .x = -1.0, .y = 0, .z = -1.0 },
+            .pos = .{ .x = -1.0, .y = -1.0, .z = 0 },
             .col = .{ .r = 0, .g = 0, .b = 1 },
         });
         const v4 = try state.terrain.addVertex(.{
-            .pos = .{ .x = 1.0, .y = 0, .z = -1.0 },
+            .pos = .{ .x = 1.0, .y = -1.0, .z = 0 },
             .col = .{ .r = 0, .g = 1, .b = 1 },
         });
         try state.terrain.addIndex(v1);
-        try state.terrain.addIndex(v2);
-        try state.terrain.addIndex(v3);
         try state.terrain.addIndex(v3);
         try state.terrain.addIndex(v2);
+        try state.terrain.addIndex(v2);
+        try state.terrain.addIndex(v3);
         try state.terrain.addIndex(v4);
     }
 }
@@ -599,6 +602,8 @@ fn create_axes() !void {
         try state.axes.addIndex(v6);
     }
 
+    if (false)
+    {
     for (1..1000) |i| {
         const f: f32 = @floatFromInt(i);
 
@@ -645,6 +650,7 @@ fn create_axes() !void {
         });
         try state.axes.addIndex(v7);
         try state.axes.addIndex(v8);
+    }
     }
 }
 
@@ -724,7 +730,7 @@ fn begin_3d() void {
     const width: f32 = @floatFromInt(state.width);
     const height: f32 = @floatFromInt(state.height);
 
-    const aspect = height / width;
+    const aspect = width / height;
 
     const model = math.identity();
 
@@ -741,9 +747,9 @@ fn begin_3d() void {
         std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{model[3][0], model[3][1], model[3][2], model[3][3]});
     }
 
-    const ca : f32 = @floatCast (@cos (state.now / 3));
-    const sa : f32 = @floatCast (@sin (state.now / 3));
-    state.main_camera.position = .{ 5 * ca, 2, 5 * sa, 1 };
+    const ca : f32 = @floatCast (@cos (-state.now / 7));
+    const sa : f32 = @floatCast (@sin (state.now / 9));
+    state.main_camera.position = .{ 5 * ca, 5 * sa, 2, 1 };
 
     const view = math.lookAtLh(
         state.main_camera.position,
@@ -751,10 +757,10 @@ fn begin_3d() void {
         state.main_camera.up,
     );
     // const view : math.Mat = .{
-        // .{1, 0, 0, -0.5},
-        // .{0, 1, 0, -2},
-        // .{0, 0, 1, 4},
-        // .{0, 0, 0, 1},
+        // .{1, 0, 0, 0},
+        // .{0, 1, 0, 0},
+        // .{0, 0, 1, 0},
+        // .{-0.5, -2, 4, 1},
     // };
 
     if (false)
@@ -770,15 +776,25 @@ fn begin_3d() void {
     // const projection = math.perspectiveFovLhGl(0.5 * std.math.pi, aspect, 0.01, 100);
     const near : f32 = 0.1;
     const far : f32 = 1000;
+
     const a : f32 = (-far - near) / (near - far);
     const b : f32 = (2 * far * near) / (near - far);
-
-    const projection : math.Mat = .{
-        .{1*aspect, 0, 0, 0},
+    const proj : math.Mat = .{
+        .{1/aspect, 0, 0, 0},
         .{0, 1, 0, 0},
-        .{0, 0, a, b},
-        .{0, 0, 1, 0},
+        .{0, 0, a, 1},
+        .{0, 0, b, 0},
     };
+
+    if (false)
+    {
+        std.debug.print("proj_: {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{proj[0][0], proj[0][1], proj[0][2], proj[0][3]});
+        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{proj[1][0], proj[1][1], proj[1][2], proj[1][3]});
+        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{proj[2][0], proj[2][1], proj[2][2], proj[2][3]});
+        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{proj[3][0], proj[3][1], proj[3][2], proj[3][3]});
+    }
+
+    const projection = math.perspectiveFovLhGl (std.math.pi/2.0, aspect, near, far);
 
     if (false)
     {
@@ -788,20 +804,17 @@ fn begin_3d() void {
         std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{projection[3][0], projection[3][1], projection[3][2], projection[3][3]});
     }
 
-    const model_view = math.mul(model, view);
-    const mvp = math.mul(model_view, projection);
-
-    if (false)
-    {
-        std.debug.print("mvp  : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{mvp[0][0], mvp[0][1], mvp[0][2], mvp[0][3]});
-        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{mvp[1][0], mvp[1][1], mvp[1][2], mvp[1][3]});
-        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{mvp[2][0], mvp[2][1], mvp[2][2], mvp[2][3]});
-        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{mvp[3][0], mvp[3][1], mvp[3][2], mvp[3][3]});
-    }
-
     state.basic_shader.setUniformMat("model", model);
     state.basic_shader.setUniformMat("view", view);
-    state.basic_shader.setUniformMat("projection", projection);
+
+    if (state.show_proj)
+    {
+        state.basic_shader.setUniformMat("projection", proj);
+    }
+    else
+    {
+        state.basic_shader.setUniformMat("projection", projection);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -849,10 +862,10 @@ fn draw_cube() void {
         const ca : f32 = @floatCast (@cos (state.now));
         const sa : f32 = @floatCast (@sin (state.now));
         const model : math.Mat = .{
-            .{ca, 0, -sa, 0},
-            .{0, 1, 0, 0.5},
-            .{sa, 0, ca, 0},
-            .{0, 0, 0, 1},
+            .{ca, sa, 0, 0},
+            .{-sa, ca, 0, 0},
+            .{0, 0, 1, 0},
+            .{0, 0, 0.5, 1},
         };
 
         state.basic_shader.setUniformMat("model", model);

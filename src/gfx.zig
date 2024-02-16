@@ -40,7 +40,7 @@ pub const Projection = enum {
 pub const Camera = struct {
     position: math.Vec = .{ 0.5, 2, -4, 1 },
     target: math.Vec = .{ 0, 0, 0, 1 },
-    up: math.Vec = .{ 0, 1, 0, 0 },
+    up: math.Vec = .{ 0, 0, 1, 0 }, // z is up - just accept it :-)
     fovy: f32 = 90,
     projection: Projection = .perspective,
 };
@@ -298,7 +298,7 @@ pub const Shader = struct {
         if (location == -1) {
             std.debug.print("Unknown uniform {s}\n", .{name});
         }
-        gl.uniformMatrix4fv(location, 1, gl.TRUE, math.arrNPtr(&value));
+        gl.uniformMatrix4fv(location, 1, gl.FALSE, math.arrNPtr(&value));
     }
 };
 
