@@ -98,7 +98,7 @@ pub fn main() !void {
     gl.debugMessageCallback(opengl_debug_message, null);
     gl.enable(gl.DEBUG_OUTPUT);
 
-    glfw.swapInterval(0);
+    glfw.swapInterval(1);
 
     _ = state.main_window.setKeyCallback(on_key);
     _ = state.main_window.setCharCallback(on_char);
@@ -499,23 +499,37 @@ fn create_mesh() !void {
     state.terrain = try gfx.Mesh.init(state.allocator, .triangles);
     errdefer state.terrain.deinit();
 
+    var vertexes : [16 * 16] u32 = undefined;
+
+    for (0 .. 16) |x|
+    {
+        for (0 .. 16) |y|
+        {
+            vertexes[x * 16 + y] = try state.terrain.addVertex (.{
+                .pos = .{ .x = @floatFromInt (x), .y = @floatFromInt (y), .z = 0 },
+                .col = .{ .r = 0, .g = 1, .b = 0 },
+            });
+        }
+    }
+
     {
         const v1 = try state.terrain.addVertex(.{
-            .pos = .{ .x = -1.0, .y = 1.0, .z = 0 },
-            .col = .{ .r = 1, .g = 0, .b = 0 },
+            .pos = .{ .x = -1.0, .y = 0.0, .z = 0 },
+            .col = .{ .r = 0, .g = 1, .b = 0 },
         });
         const v2 = try state.terrain.addVertex(.{
-            .pos = .{ .x = 1.0, .y = 1.0, .z = 0 },
+            .pos = .{ .x = 0.0, .y = 0.0, .z = 0 },
             .col = .{ .r = 0, .g = 1, .b = 0 },
         });
         const v3 = try state.terrain.addVertex(.{
             .pos = .{ .x = -1.0, .y = -1.0, .z = 0 },
-            .col = .{ .r = 0, .g = 0, .b = 1 },
+            .col = .{ .r = 0, .g = 1, .b = 0 },
         });
         const v4 = try state.terrain.addVertex(.{
-            .pos = .{ .x = 1.0, .y = -1.0, .z = 0 },
-            .col = .{ .r = 0, .g = 1, .b = 1 },
+            .pos = .{ .x = 0.0, .y = -1.0, .z = 0.1 },
+            .col = .{ .r = 0, .g = 0.9, .b = 0 },
         });
+
         try state.terrain.addIndex(v1);
         try state.terrain.addIndex(v3);
         try state.terrain.addIndex(v2);
@@ -564,57 +578,6 @@ fn create_axes() !void {
         try state.axes.addIndex(v4);
         try state.axes.addIndex(v5);
         try state.axes.addIndex(v6);
-    }
-
-    if (true)
-    {
-        for (1..100) |i| {
-            const f: f32 = @floatFromInt(i);
-
-            const v1 = try state.axes.addVertex(.{
-                .pos = .{ .x = f, .y = -100, .z = 0 },
-                .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
-            });
-            const v2 = try state.axes.addVertex(.{
-                .pos = .{ .x = f, .y = 100, .z = 0 },
-                .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
-            });
-            try state.axes.addIndex(v1);
-            try state.axes.addIndex(v2);
-
-            const v3 = try state.axes.addVertex(.{
-                .pos = .{ .x = -f, .y = -100, .z = 0 },
-                .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
-            });
-            const v4 = try state.axes.addVertex(.{
-                .pos = .{ .x = -f, .y = 100, .z = 0 },
-                .col = .{ .r = 0.5, .g = 0.8, .b = 0.5 },
-            });
-            try state.axes.addIndex(v3);
-            try state.axes.addIndex(v4);
-
-            const v5 = try state.axes.addVertex(.{
-                .pos = .{ .x = -100, .y = f, .z = 0 },
-                .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
-            });
-            const v6 = try state.axes.addVertex(.{
-                .pos = .{ .x = 100, .y = f, .z = 0 },
-                .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
-            });
-            try state.axes.addIndex(v5);
-            try state.axes.addIndex(v6);
-
-            const v7 = try state.axes.addVertex(.{
-                .pos = .{ .x = -100, .y = -f, .z = 0 },
-                .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
-            });
-            const v8 = try state.axes.addVertex(.{
-                .pos = .{ .x = 100, .y = -f, .z = 0 },
-                .col = .{ .r = 0.5, .g = 0.8, .b = 0.5 },
-            });
-            try state.axes.addIndex(v7);
-            try state.axes.addIndex(v8);
-        }
     }
 }
 
