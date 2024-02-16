@@ -61,13 +61,18 @@ pub var state: State = .{};
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 pub fn main() !void {
+    const main_zone = tracy.ZoneNC(@src(), "main", 0x00_80_80_80);
+    defer main_zone.End ();
+
+    const main_start_zone = tracy.ZoneNC(@src(), "main_start", 0x00_80_80_80);
+
     std.debug.print("City\n", .{});
 
     try glfw.init();
     defer glfw.terminate();
 
     const gl_major = 4;
-    const gl_minor = 6;
+    const gl_minor = 3;
 
     glfw.windowHintTyped(.context_version_major, gl_major);
     glfw.windowHintTyped(.context_version_minor, gl_minor);
@@ -127,10 +132,13 @@ pub fn main() !void {
     gl.clearColor (0.0, 0.0, 0.0, 1.0);
     gl.clearDepth (1.0);
 
-    gl.disable (gl.CULL_FACE);
+    gl.enable (gl.CULL_FACE);
     gl.cullFace (gl.BACK);
     gl.frontFace (gl.CW);
+    gl.depthFunc (gl.LEQUAL);
     gl.enable(gl.DEPTH_TEST);
+
+    main_start_zone.End ();
 
     while (!state.main_window.shouldClose()) {
         tracy.FrameMark();
@@ -226,10 +234,6 @@ fn draw_gui() void {
 
     draw_debug();
     draw_fps();
-
-    // if (state.show_demo) {
-    // gui.showDemoWindow (&state.show_demo);
-    // }
 
     const draw_zone = tracy.ZoneNC(@src(), "gui.backend.draw", 0x00800000);
     gui.backend.draw();
@@ -737,6 +741,10 @@ fn begin_3d() void {
         std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{model[3][0], model[3][1], model[3][2], model[3][3]});
     }
 
+    const ca : f32 = @floatCast (@cos (state.now / 3));
+    const sa : f32 = @floatCast (@sin (state.now / 3));
+    state.main_camera.position = .{ 5 * ca, 2, 5 * sa, 1 };
+
     const view = math.lookAtLh(
         state.main_camera.position,
         state.main_camera.target,
@@ -751,6 +759,7 @@ fn begin_3d() void {
 
     if (false)
     {
+        std.debug.print("pos  : {d:7.2} {d:7.2} {d:7.2} {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{state.main_camera.position[0], state.main_camera.position[1], state.main_camera.position[2], state.main_camera.position[3], state.now, @sin (state.now), @cos (state.now)});
         std.debug.print("view : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{view[0][0], view[0][1], view[0][2], view[0][3]});
         std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{view[1][0], view[1][1], view[1][2], view[1][3]});
         std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{view[2][0], view[2][1], view[2][2], view[2][3]});
@@ -759,10 +768,15 @@ fn begin_3d() void {
 
     // const projection = math.identity ();
     // const projection = math.perspectiveFovLhGl(0.5 * std.math.pi, aspect, 0.01, 100);
+    const near : f32 = 0.1;
+    const far : f32 = 1000;
+    const a : f32 = (-far - near) / (near - far);
+    const b : f32 = (2 * far * near) / (near - far);
+
     const projection : math.Mat = .{
         .{1*aspect, 0, 0, 0},
         .{0, 1, 0, 0},
-        .{0, 0, 1, 0},
+        .{0, 0, a, b},
         .{0, 0, 1, 0},
     };
 
