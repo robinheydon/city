@@ -25,6 +25,7 @@ pub const State = struct {
     show_fps: bool = true,
     show_terrain: bool = true,
     show_axes: bool = true,
+    show_cube: bool = true,
 
     gui_capture_mouse: bool = false,
     gui_capture_keyboard: bool = false,
@@ -42,6 +43,7 @@ pub const State = struct {
 
     terrain: gfx.Mesh = undefined,
     axes: gfx.Mesh = undefined,
+    cube: gfx.Mesh = undefined,
 
     basic_shader: gfx.Shader = undefined,
 
@@ -71,23 +73,29 @@ pub fn main() !void {
     glfw.windowHintTyped(.context_version_minor, gl_minor);
     glfw.windowHintTyped(.opengl_profile, .opengl_core_profile);
     glfw.windowHintTyped(.opengl_forward_compat, true);
+    glfw.windowHintTyped(.opengl_debug_context, true);
     glfw.windowHintTyped(.client_api, .opengl_api);
+    glfw.windowHintTyped(.red_bits, 8);
+    glfw.windowHintTyped(.green_bits, 8);
+    glfw.windowHintTyped(.blue_bits, 8);
+    glfw.windowHintTyped(.depth_bits, 24);
     glfw.windowHintTyped(.doublebuffer, true);
 
     state.main_window = try glfw.Window.create(1280, 720, "City", null);
     defer state.main_window.destroy();
 
     glfw.makeContextCurrent(state.main_window);
-    glfw.swapInterval(1);
-
-    _ = state.main_window.setKeyCallback(on_key);
-    _ = state.main_window.setCharCallback(on_char);
-    _ = state.main_window.setCursorPosCallback(on_mouse_move);
 
     try opengl.loadCoreProfile(glfw.getProcAddress, gl_major, gl_minor);
 
     gl.debugMessageCallback(opengl_debug_message, null);
     gl.enable(gl.DEBUG_OUTPUT);
+
+    glfw.swapInterval(1);
+
+    _ = state.main_window.setKeyCallback(on_key);
+    _ = state.main_window.setCharCallback(on_char);
+    _ = state.main_window.setCursorPosCallback(on_mouse_move);
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.debug.assert(gpa.deinit() == .ok);
@@ -113,33 +121,45 @@ pub fn main() !void {
     try create_axes();
     defer state.axes.deinit();
 
-    // gl.enable (gl.CULL_FACE);
-    // gl.cullFace (gl.BACK);
-    // gl.frontFace (gl.CW);
-    gl.disable(gl.CULL_FACE);
-    gl.disable(gl.DEPTH_TEST);
+    try create_cube();
+    defer state.cube.deinit();
+
+    gl.clearColor (0.0, 0.0, 0.0, 1.0);
+    gl.clearDepth (1.0);
+
+    gl.disable (gl.CULL_FACE);
+    gl.cullFace (gl.BACK);
+    gl.frontFace (gl.CW);
+    gl.enable(gl.DEPTH_TEST);
 
     while (!state.main_window.shouldClose()) {
         tracy.FrameMark();
-
-        const fb_size = state.main_window.getFramebufferSize();
-        state.width = fb_size[0];
-        state.height = fb_size[1];
 
         const dt = update_delta_time();
         _ = dt;
 
         {
-            const zone = tracy.ZoneNC(@src(), "gl.clearBufferfv", 0x00_80_80_80);
+            const zone = tracy.ZoneNC(@src(), "gl.viewport", 0x00_80_80_80);
             defer zone.End();
-            gl.clearBufferfv(gl.COLOR, 0, &[_]f32{ 0.05, 0.05, 0.05, 1 });
+
+            const fb_size = state.main_window.getFramebufferSize();
+            state.width = fb_size[0];
+            state.height = fb_size[1];
+
             gl.viewport(0, 0, state.width, state.height);
+        }
+
+        {
+            const zone = tracy.ZoneNC(@src(), "gl.clear", 0x00_80_80_80);
+            defer zone.End();
+            gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
         }
 
         begin_3d();
 
-        draw_axes();
+        draw_cube();
         draw_terrain();
+        draw_axes();
 
         draw_gui();
 
@@ -347,6 +367,8 @@ fn on_key(window: *glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Actio
         state.show_terrain = !state.show_terrain;
     } else if (key == .F4 and action == .press and mod == 0) {
         state.show_axes = !state.show_axes;
+    } else if (key == .F5 and action == .press and mod == 0) {
+        state.show_cube = !state.show_cube;
     }
 }
 
@@ -508,19 +530,19 @@ fn create_mesh() !void {
 
     {
         const v1 = try state.terrain.addVertex(.{
-            .pos = .{ .x = -1.0, .y = 1.0, .z = 0 },
+            .pos = .{ .x = -1.0, .y = 0, .z = 1.0 },
             .col = .{ .r = 1, .g = 0, .b = 0 },
         });
         const v2 = try state.terrain.addVertex(.{
-            .pos = .{ .x = 1.0, .y = 1.0, .z = 0 },
+            .pos = .{ .x = 1.0, .y = 0, .z = 1.0 },
             .col = .{ .r = 0, .g = 1, .b = 0 },
         });
         const v3 = try state.terrain.addVertex(.{
-            .pos = .{ .x = -1.0, .y = -1.0, .z = 0 },
+            .pos = .{ .x = -1.0, .y = 0, .z = -1.0 },
             .col = .{ .r = 0, .g = 0, .b = 1 },
         });
         const v4 = try state.terrain.addVertex(.{
-            .pos = .{ .x = 1.0, .y = -1.0, .z = 0 },
+            .pos = .{ .x = 1.0, .y = 0, .z = -1.0 },
             .col = .{ .r = 0, .g = 1, .b = 1 },
         });
         try state.terrain.addIndex(v1);
@@ -573,53 +595,115 @@ fn create_axes() !void {
         try state.axes.addIndex(v6);
     }
 
-    for (1..100) |i| {
+    for (1..1000) |i| {
         const f: f32 = @floatFromInt(i);
 
         const v1 = try state.axes.addVertex(.{
-            .pos = .{ .x = f / 10, .y = -1000, .z = 0 },
+            .pos = .{ .x = f, .y = 0, .z = -1000 },
             .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
         });
         const v2 = try state.axes.addVertex(.{
-            .pos = .{ .x = f / 10, .y = 1000, .z = 0 },
+            .pos = .{ .x = f, .y = 0, .z = 1000 },
             .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
         });
         try state.axes.addIndex(v1);
         try state.axes.addIndex(v2);
 
         const v3 = try state.axes.addVertex(.{
-            .pos = .{ .x = -f / 10, .y = -1000, .z = 0 },
+            .pos = .{ .x = -f, .y = 0, .z = -1000 },
             .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
         });
         const v4 = try state.axes.addVertex(.{
-            .pos = .{ .x = -f / 10, .y = 1000, .z = 0 },
+            .pos = .{ .x = -f, .y = 0, .z = 1000 },
             .col = .{ .r = 0.5, .g = 0.8, .b = 0.5 },
         });
         try state.axes.addIndex(v3);
         try state.axes.addIndex(v4);
 
         const v5 = try state.axes.addVertex(.{
-            .pos = .{ .x = -1000, .y = f / 10, .z = 0 },
+            .pos = .{ .x = -1000, .y = 0, .z = f },
             .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
         });
         const v6 = try state.axes.addVertex(.{
-            .pos = .{ .x = 1000, .y = f / 10, .z = 0 },
+            .pos = .{ .x = 1000, .y = 0, .z = f },
             .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
         });
         try state.axes.addIndex(v5);
         try state.axes.addIndex(v6);
 
         const v7 = try state.axes.addVertex(.{
-            .pos = .{ .x = -1000, .y = -f / 10, .z = 0 },
+            .pos = .{ .x = -1000, .y = 0, .z = -f },
             .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
         });
         const v8 = try state.axes.addVertex(.{
-            .pos = .{ .x = 1000, .y = -f / 10, .z = 0 },
+            .pos = .{ .x = 1000, .y = 0, .z = -f },
             .col = .{ .r = 0.5, .g = 0.8, .b = 0.5 },
         });
         try state.axes.addIndex(v7);
         try state.axes.addIndex(v8);
     }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+fn create_cube () !void
+{
+    state.cube = try gfx.Mesh.init(state.allocator, .triangles);
+    errdefer state.cube.deinit();
+
+    const v0 = try state.cube.addVertex(.{
+        .pos = .{ .x = -0.5, .y = -0.5, .z = 0.5 },
+        .col = .{ .r = 1, .g = 1, .b = 0 },
+    });
+    const v1 = try state.cube.addVertex(.{
+        .pos = .{ .x = 0.5, .y = -0.5, .z = 0.5 },
+        .col = .{ .r = 1, .g = 1, .b = 0 },
+    });
+    const v2 = try state.cube.addVertex(.{
+        .pos = .{ .x = -0.5, .y = -0.5, .z = -0.5 },
+        .col = .{ .r = 1, .g = 0, .b = 1 },
+    });
+    const v3 = try state.cube.addVertex(.{
+        .pos = .{ .x = 0.5, .y = -0.5, .z = -0.5 },
+        .col = .{ .r = 1, .g = 0, .b = 1 },
+    });
+    const v4 = try state.cube.addVertex(.{
+        .pos = .{ .x = -0.5, .y = 0.5, .z = 0.5 },
+        .col = .{ .r = 1, .g = 1, .b = 0 },
+    });
+    const v5 = try state.cube.addVertex(.{
+        .pos = .{ .x = 0.5, .y = 0.5, .z = 0.5 },
+        .col = .{ .r = 1, .g = 1, .b = 0 },
+    });
+    const v6 = try state.cube.addVertex(.{
+        .pos = .{ .x = -0.5, .y = 0.5, .z = -0.5 },
+        .col = .{ .r = 1, .g = 0, .b = 1 },
+    });
+    const v7 = try state.cube.addVertex(.{
+        .pos = .{ .x = 0.5, .y = 0.5, .z = -0.5 },
+        .col = .{ .r = 1, .g = 0, .b = 1 },
+    });
+
+    try state.cube.addIndex(v1); try state.cube.addIndex(v0); try state.cube.addIndex(v2);
+    try state.cube.addIndex(v1); try state.cube.addIndex(v2); try state.cube.addIndex(v3);
+
+    try state.cube.addIndex(v4); try state.cube.addIndex(v5); try state.cube.addIndex(v6);
+    try state.cube.addIndex(v6); try state.cube.addIndex(v5); try state.cube.addIndex(v7);
+
+    try state.cube.addIndex(v0); try state.cube.addIndex(v4); try state.cube.addIndex(v2);
+    try state.cube.addIndex(v2); try state.cube.addIndex(v4); try state.cube.addIndex(v6);
+
+    try state.cube.addIndex(v5); try state.cube.addIndex(v1); try state.cube.addIndex(v3);
+    try state.cube.addIndex(v5); try state.cube.addIndex(v3); try state.cube.addIndex(v7);
+
+    try state.cube.addIndex(v3); try state.cube.addIndex(v2); try state.cube.addIndex(v6);
+    try state.cube.addIndex(v3); try state.cube.addIndex(v6); try state.cube.addIndex(v7);
+
+    try state.cube.addIndex(v0); try state.cube.addIndex(v1); try state.cube.addIndex(v4);
+    try state.cube.addIndex(v4); try state.cube.addIndex(v1); try state.cube.addIndex(v5);
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -639,33 +723,67 @@ fn begin_3d() void {
     const aspect = height / width;
 
     const model = math.identity();
-    std.debug.print("model: {any}\n", .{model});
+
+    if (false)
+    {
+        std.debug.print("\n", .{});
+    }
+
+    if (false)
+    {
+        std.debug.print("model: {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{model[0][0], model[0][1], model[0][2], model[0][3]});
+        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{model[1][0], model[1][1], model[1][2], model[1][3]});
+        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{model[2][0], model[2][1], model[2][2], model[2][3]});
+        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{model[3][0], model[3][1], model[3][2], model[3][3]});
+    }
 
     const view = math.lookAtLh(
-        math.f32x4(state.main_camera.position[0], state.main_camera.position[1], state.main_camera.position[2], 1),
-        math.f32x4(state.main_camera.target[0], state.main_camera.target[1], state.main_camera.target[2], 1),
-        math.f32x4(state.main_camera.up[0], state.main_camera.up[1], state.main_camera.up[2], 0),
+        state.main_camera.position,
+        state.main_camera.target,
+        state.main_camera.up,
     );
-    std.debug.print("view: {any}\n", .{view});
+    // const view : math.Mat = .{
+        // .{1, 0, 0, -0.5},
+        // .{0, 1, 0, -2},
+        // .{0, 0, 1, 4},
+        // .{0, 0, 0, 1},
+    // };
 
-    // const projection = math.identity (); _ = aspect;
-    const projection = math.perspectiveFovLhGl(0.5 * std.math.pi, aspect, 0.1, 100);
+    if (false)
+    {
+        std.debug.print("view : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{view[0][0], view[0][1], view[0][2], view[0][3]});
+        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{view[1][0], view[1][1], view[1][2], view[1][3]});
+        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{view[2][0], view[2][1], view[2][2], view[2][3]});
+        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{view[3][0], view[3][1], view[3][2], view[3][3]});
+    }
 
-    std.debug.print("proj: {any}\n", .{projection});
+    // const projection = math.identity ();
+    // const projection = math.perspectiveFovLhGl(0.5 * std.math.pi, aspect, 0.01, 100);
+    const projection : math.Mat = .{
+        .{1*aspect, 0, 0, 0},
+        .{0, 1, 0, 0},
+        .{0, 0, 1, 0},
+        .{0, 0, 1, 0},
+    };
+
+    if (false)
+    {
+        std.debug.print("proj : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{projection[0][0], projection[0][1], projection[0][2], projection[0][3]});
+        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{projection[1][0], projection[1][1], projection[1][2], projection[1][3]});
+        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{projection[2][0], projection[2][1], projection[2][2], projection[2][3]});
+        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{projection[3][0], projection[3][1], projection[3][2], projection[3][3]});
+    }
 
     const model_view = math.mul(model, view);
-    const model_view_projection = math.mul(model_view, projection);
+    const mvp = math.mul(model_view, projection);
 
-    std.debug.print("mvp: {any}\n", .{model_view_projection});
-
-    const p0 = math.F32x4{ 0, 0, 0, 1 };
-    std.debug.print("p0: {any}\n", .{math.mul(model_view_projection, p0)});
-
-    const p1 = math.F32x4{ 1, 0, 0, 1 };
-    std.debug.print("p1: {any}\n", .{math.mul(model_view_projection, p1)});
-
-    const p2 = math.F32x4{ 0, 1, 0, 1 };
-    std.debug.print("p2: {any}\n", .{math.mul(model_view_projection, p2)});
+    if (false)
+    {
+        std.debug.print("mvp  : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{mvp[0][0], mvp[0][1], mvp[0][2], mvp[0][3]});
+        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{mvp[1][0], mvp[1][1], mvp[1][2], mvp[1][3]});
+        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{mvp[2][0], mvp[2][1], mvp[2][2], mvp[2][3]});
+        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{mvp[3][0], mvp[3][1], mvp[3][2], mvp[3][3]});
+    }
 
     state.basic_shader.setUniformMat("model", model);
     state.basic_shader.setUniformMat("view", view);
@@ -699,6 +817,33 @@ fn draw_terrain() void {
         state.basic_shader.use();
         defer state.basic_shader.end();
         state.terrain.render();
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+fn draw_cube() void {
+    const zone = tracy.ZoneNC(@src(), "draw_cube", 0x00_ff_00_00);
+    defer zone.End();
+
+    if (state.show_cube) {
+        state.basic_shader.use();
+        defer state.basic_shader.end();
+
+        const ca : f32 = @floatCast (@cos (state.now));
+        const sa : f32 = @floatCast (@sin (state.now));
+        const model : math.Mat = .{
+            .{ca, 0, -sa, 0},
+            .{0, 1, 0, 0.5},
+            .{sa, 0, ca, 0},
+            .{0, 0, 0, 1},
+        };
+
+        state.basic_shader.setUniformMat("model", model);
+        state.cube.render();
+        state.basic_shader.setUniformMat("model", math.identity ());
     }
 }
 

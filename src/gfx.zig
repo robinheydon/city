@@ -38,9 +38,9 @@ pub const Projection = enum {
 };
 
 pub const Camera = struct {
-    position: [3]f32 = [3]f32{ 50, 100, 200 },
-    target: [3]f32 = [3]f32{ 0, 0, 0 },
-    up: [3]f32 = [3]f32{ 0, 1, 0 },
+    position: math.Vec = .{ 0.5, 2, -4, 1 },
+    target: math.Vec = .{ 0, 0, 0, 1 },
+    up: math.Vec = .{ 0, 1, 0, 0 },
     fovy: f32 = 90,
     projection: Projection = .perspective,
 };
@@ -141,6 +141,9 @@ pub const Mesh = struct {
         gl.bindVertexArray(self.vao);
 
         if (self.vbo_dirty) {
+            const dirty_zone = tracy.ZoneNC(@src(), "vbo_dirty", 0x00_80_80_80);
+            defer dirty_zone.End();
+
             gl.bindBuffer(gl.ARRAY_BUFFER, self.vbo);
             gl.bufferData(
                 gl.ARRAY_BUFFER,
@@ -152,6 +155,9 @@ pub const Mesh = struct {
         }
 
         if (self.ebo_dirty) {
+            const dirty_zone = tracy.ZoneNC(@src(), "ebo_dirty", 0x00_80_80_80);
+            defer dirty_zone.End();
+
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, self.ebo);
             gl.bufferData(
                 gl.ELEMENT_ARRAY_BUFFER,
