@@ -86,6 +86,7 @@ pub fn main() !void {
     glfw.windowHintTyped(.blue_bits, 8);
     glfw.windowHintTyped(.depth_bits, 24);
     glfw.windowHintTyped(.doublebuffer, true);
+    glfw.windowHintTyped(.samples, 4);
 
     state.main_window = try glfw.Window.create(1920, 1080, "City", null);
     defer state.main_window.destroy();
@@ -97,7 +98,7 @@ pub fn main() !void {
     gl.debugMessageCallback(opengl_debug_message, null);
     gl.enable(gl.DEBUG_OUTPUT);
 
-    glfw.swapInterval(1);
+    glfw.swapInterval(0);
 
     _ = state.main_window.setKeyCallback(on_key);
     _ = state.main_window.setCharCallback(on_char);
@@ -166,9 +167,9 @@ pub fn main() !void {
 
         begin_3d();
 
-        draw_cube();
-        draw_terrain();
         draw_axes();
+        draw_terrain();
+        draw_cube();
 
         draw_gui();
 
@@ -225,12 +226,8 @@ fn draw_gui() void {
     const zone = tracy.ZoneNC(@src(), "draw_gui", 0x00_ff_00_00);
     defer zone.End();
 
-    const fb_size_zone = tracy.ZoneNC(@src(), "getFramebufferSize", 0x00800000);
-    const fb_size = state.main_window.getFramebufferSize();
-    fb_size_zone.End();
-
     const fb_zone = tracy.ZoneNC(@src(), "gui.backend.newFrame", 0x00800000);
-    gui.backend.newFrame(@intCast(fb_size[0]), @intCast(fb_size[1]));
+    gui.backend.newFrame(@intCast (state.width), @intCast (state.height));
     fb_zone.End();
 
     draw_debug();
@@ -420,39 +417,6 @@ fn on_mouse_move(window: *glfw.Window, x: f64, y: f64) callconv(.C) void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn opengl_debug_message(
-    source: gl.Enum,
-    kind: gl.Enum,
-    id: gl.Enum,
-    severity: gl.Enum,
-    len: gl.Sizei,
-    message: [*c]const u8,
-    user: *const anyopaque,
-) callconv(.C) void {
-    _ = user;
-
-    const zone = tracy.ZoneNC(@src(), "opengl_debug_message", 0x00_ff_00_00);
-    defer zone.End();
-
-    const slice: []const u8 = message[0..@intCast(len)];
-
-    const block = std.fmt.allocPrint(state.allocator, "{} {} {} {} {s}", .{
-        source,
-        kind,
-        id,
-        severity,
-        slice,
-    }) catch return;
-    defer state.allocator.free(block);
-
-    std.debug.print("{s}\n", .{block});
-    tracy.Message(block);
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-
 const TracyAllocator = struct {
     child_allocator: std.mem.Allocator,
 
@@ -571,27 +535,27 @@ fn create_axes() !void {
 
     {
         const v1 = try state.axes.addVertex(.{
-            .pos = .{ .x = -1000, .y = 0, .z = 0 },
+            .pos = .{ .x = -10000, .y = 0, .z = 0 },
             .col = .{ .r = 1, .g = 1, .b = 0 },
         });
         const v2 = try state.axes.addVertex(.{
-            .pos = .{ .x = 1000, .y = 0, .z = 0 },
+            .pos = .{ .x = 10000, .y = 0, .z = 0 },
             .col = .{ .r = 1, .g = 1, .b = 0 },
         });
         const v3 = try state.axes.addVertex(.{
-            .pos = .{ .x = 0, .y = -2000, .z = 0 },
+            .pos = .{ .x = 0, .y = -10000, .z = 0 },
             .col = .{ .r = 1, .g = 0, .b = 1 },
         });
         const v4 = try state.axes.addVertex(.{
-            .pos = .{ .x = 0, .y = 2000, .z = 0 },
+            .pos = .{ .x = 0, .y = 10000, .z = 0 },
             .col = .{ .r = 1, .g = 0, .b = 1 },
         });
         const v5 = try state.axes.addVertex(.{
-            .pos = .{ .x = 0, .y = 0, .z = -2000 },
+            .pos = .{ .x = 0, .y = 0, .z = -10000 },
             .col = .{ .r = 0, .g = 1, .b = 1 },
         });
         const v6 = try state.axes.addVertex(.{
-            .pos = .{ .x = 0, .y = 0, .z = 2000 },
+            .pos = .{ .x = 0, .y = 0, .z = 10000 },
             .col = .{ .r = 0, .g = 1, .b = 1 },
         });
         try state.axes.addIndex(v1);
@@ -602,55 +566,55 @@ fn create_axes() !void {
         try state.axes.addIndex(v6);
     }
 
-    if (false)
+    if (true)
     {
-    for (1..1000) |i| {
-        const f: f32 = @floatFromInt(i);
+        for (1..100) |i| {
+            const f: f32 = @floatFromInt(i);
 
-        const v1 = try state.axes.addVertex(.{
-            .pos = .{ .x = f, .y = 0, .z = -1000 },
-            .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
-        });
-        const v2 = try state.axes.addVertex(.{
-            .pos = .{ .x = f, .y = 0, .z = 1000 },
-            .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
-        });
-        try state.axes.addIndex(v1);
-        try state.axes.addIndex(v2);
+            const v1 = try state.axes.addVertex(.{
+                .pos = .{ .x = f, .y = -100, .z = 0 },
+                .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
+            });
+            const v2 = try state.axes.addVertex(.{
+                .pos = .{ .x = f, .y = 100, .z = 0 },
+                .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
+            });
+            try state.axes.addIndex(v1);
+            try state.axes.addIndex(v2);
 
-        const v3 = try state.axes.addVertex(.{
-            .pos = .{ .x = -f, .y = 0, .z = -1000 },
-            .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
-        });
-        const v4 = try state.axes.addVertex(.{
-            .pos = .{ .x = -f, .y = 0, .z = 1000 },
-            .col = .{ .r = 0.5, .g = 0.8, .b = 0.5 },
-        });
-        try state.axes.addIndex(v3);
-        try state.axes.addIndex(v4);
+            const v3 = try state.axes.addVertex(.{
+                .pos = .{ .x = -f, .y = -100, .z = 0 },
+                .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
+            });
+            const v4 = try state.axes.addVertex(.{
+                .pos = .{ .x = -f, .y = 100, .z = 0 },
+                .col = .{ .r = 0.5, .g = 0.8, .b = 0.5 },
+            });
+            try state.axes.addIndex(v3);
+            try state.axes.addIndex(v4);
 
-        const v5 = try state.axes.addVertex(.{
-            .pos = .{ .x = -1000, .y = 0, .z = f },
-            .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
-        });
-        const v6 = try state.axes.addVertex(.{
-            .pos = .{ .x = 1000, .y = 0, .z = f },
-            .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
-        });
-        try state.axes.addIndex(v5);
-        try state.axes.addIndex(v6);
+            const v5 = try state.axes.addVertex(.{
+                .pos = .{ .x = -100, .y = f, .z = 0 },
+                .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
+            });
+            const v6 = try state.axes.addVertex(.{
+                .pos = .{ .x = 100, .y = f, .z = 0 },
+                .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
+            });
+            try state.axes.addIndex(v5);
+            try state.axes.addIndex(v6);
 
-        const v7 = try state.axes.addVertex(.{
-            .pos = .{ .x = -1000, .y = 0, .z = -f },
-            .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
-        });
-        const v8 = try state.axes.addVertex(.{
-            .pos = .{ .x = 1000, .y = 0, .z = -f },
-            .col = .{ .r = 0.5, .g = 0.8, .b = 0.5 },
-        });
-        try state.axes.addIndex(v7);
-        try state.axes.addIndex(v8);
-    }
+            const v7 = try state.axes.addVertex(.{
+                .pos = .{ .x = -100, .y = -f, .z = 0 },
+                .col = .{ .r = 0.5, .g = 0.5, .b = 0.8 },
+            });
+            const v8 = try state.axes.addVertex(.{
+                .pos = .{ .x = 100, .y = -f, .z = 0 },
+                .col = .{ .r = 0.5, .g = 0.8, .b = 0.5 },
+            });
+            try state.axes.addIndex(v7);
+            try state.axes.addIndex(v8);
+        }
     }
 }
 
@@ -871,6 +835,74 @@ fn draw_cube() void {
         state.basic_shader.setUniformMat("model", model);
         state.cube.render();
         state.basic_shader.setUniformMat("model", math.identity ());
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+fn opengl_debug_message(
+    source: gl.Enum,
+    kind: gl.Enum,
+    id: gl.Enum,
+    severity: gl.Enum,
+    len: gl.Sizei,
+    message: [*c]const u8,
+    user: *const anyopaque,
+) callconv(.C) void {
+    _ = user;
+
+    const zone = tracy.ZoneNC(@src(), "opengl_debug_message", 0x00_ff_00_00);
+    defer zone.End();
+
+    const slice: []const u8 = message[0..@intCast(len)];
+
+    const source_name = switch (source)
+    {
+        gl.DEBUG_SOURCE_API => "API",
+        gl.DEBUG_SOURCE_WINDOW_SYSTEM => "WINDOW_SYSTEM",
+        gl.DEBUG_SOURCE_SHADER_COMPILER => "SHADER_COMPILER",
+        gl.DEBUG_SOURCE_THIRD_PARTY => "THIRD_PARTY",
+        gl.DEBUG_SOURCE_APPLICATION => "APPLICATION",
+        gl.DEBUG_SOURCE_OTHER => "OTHER",
+        else => "Unknown",
+    };
+
+    const kind_name = switch (kind)
+    {
+        gl.DEBUG_TYPE_ERROR => "ERROR",
+        gl.DEBUG_TYPE_DEPRECATED_BEHAVIOR => "DEPRECATED_BEHAVIOR",
+        gl.DEBUG_TYPE_UNDEFINED_BEHAVIOR => "UNDEFINED_BEHAVIOR",
+        gl.DEBUG_TYPE_PORTABILITY => "PORTABILITY",
+        gl.DEBUG_TYPE_PERFORMANCE => "PERFORMANCE",
+        gl.DEBUG_TYPE_OTHER => "OTHER",
+        gl.DEBUG_TYPE_MARKER => "MARKER",
+        else => "Unknown",
+    };
+
+    const severity_name = switch (severity)
+    {
+        gl.DEBUG_SEVERITY_HIGH => "High",
+        gl.DEBUG_SEVERITY_MEDIUM => "Medium",
+        gl.DEBUG_SEVERITY_LOW => "Low",
+        gl.DEBUG_SEVERITY_NOTIFICATION => "Note",
+        else => "Unknown",
+    };
+
+    if (severity == gl.DEBUG_SEVERITY_HIGH or severity == gl.DEBUG_SEVERITY_MEDIUM or severity == gl.DEBUG_SEVERITY_LOW)
+    {
+        const block = std.fmt.allocPrint(state.allocator, "{s} {s} {} {s} {s}", .{
+            source_name,
+            kind_name,
+            id,
+            severity_name,
+            slice,
+        }) catch return;
+        defer state.allocator.free(block);
+
+        std.debug.print("{s}\n", .{block});
+        tracy.Message(block);
     }
 }
 
