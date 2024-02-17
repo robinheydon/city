@@ -19,8 +19,9 @@ const rand = random.rand;
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-const max_terrain_x = 16;
-const max_terrain_y = 16;
+const max_terrain_x = 64;
+const max_terrain_y = 64;
+const terrain_cell_size = 16;
 
 pub const State = struct {
     main_window: *glfw.Window = undefined,
@@ -41,6 +42,13 @@ pub const State = struct {
     fps: f32 = 60.0,
     last_now: i64 = 0,
     now: f64 = 0,
+    delta_time: f32 = 0,
+
+    target_x: f32 = terrain_cell_size * max_terrain_x / 2,
+    target_y: f32 = terrain_cell_size * max_terrain_y / 2,
+    camera_rotation: f32 = 0,
+    camera_elevation: f32 = 16,
+    camera_distance: f32 = 32,
 
     isaac64: std.rand.Isaac64 = undefined, // rand.zig
     random: std.rand.Random = undefined,
@@ -75,6 +83,12 @@ pub fn main() !void {
 
     const main_start_zone = tracy.ZoneNC(@src(), "main_start", 0x00_80_80_80);
 
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer std.debug.assert(gpa.deinit() == .ok);
+
+    var tracy_allocator = TracyAllocator{ .child_allocator = gpa.allocator() };
+    state.allocator = tracy_allocator.allocator();
+
     std.debug.print("City\n", .{});
 
     random.init();
@@ -100,7 +114,7 @@ pub fn main() !void {
     glfw.windowHintTyped(.doublebuffer, true);
     glfw.windowHintTyped(.samples, 8);
 
-    state.main_window = try glfw.Window.create(1920, 1080, "City", null);
+    state.main_window = try glfw.Window.create(1280, 720, "City", null);
     defer state.main_window.destroy();
 
     glfw.makeContextCurrent(state.main_window);
@@ -115,12 +129,6 @@ pub fn main() !void {
     _ = state.main_window.setKeyCallback(on_key);
     _ = state.main_window.setCharCallback(on_char);
     _ = state.main_window.setCursorPosCallback(on_mouse_move);
-
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer std.debug.assert(gpa.deinit() == .ok);
-
-    var tracy_allocator = TracyAllocator{ .child_allocator = gpa.allocator() };
-    state.allocator = tracy_allocator.allocator();
 
     gui.init(state.allocator);
     defer gui.deinit();
@@ -152,11 +160,12 @@ pub fn main() !void {
 
     main_start_zone.End();
 
+    reset_delta_time ();
+
     while (!state.main_window.shouldClose()) {
         tracy.FrameMark();
 
-        const dt = update_delta_time();
-        _ = dt;
+        update_delta_time();
 
         {
             const zone = tracy.ZoneNC(@src(), "gl.viewport", 0x00_80_80_80);
@@ -189,6 +198,8 @@ pub fn main() !void {
         }
 
         process_events();
+
+        update_camera ();
     }
 }
 
@@ -211,7 +222,15 @@ fn init_height_map () void
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn update_delta_time() f32 {
+fn reset_delta_time () void {
+    state.last_now = std.time.microTimestamp();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+fn update_delta_time() void {
     const zone = tracy.ZoneNC(@src(), "update_delta_time", 0x00_ff_00_00);
     defer zone.End();
 
@@ -221,7 +240,7 @@ fn update_delta_time() f32 {
 
     state.now = @as(f64, @floatFromInt(now)) / std.time.us_per_s;
 
-    const dt = @as(f32, @floatFromInt(delta)) / std.time.us_per_s;
+    state.delta_time = @as(f32, @floatFromInt(delta)) / std.time.us_per_s;
 
     state.frame_times[state.frame_time_index] = delta;
     state.frame_time_index += 1;
@@ -238,8 +257,84 @@ fn update_delta_time() f32 {
         const average: f32 = @as(f32, @floatFromInt(total)) / state.frame_times.len / std.time.us_per_s;
         state.fps = 1 / average;
     }
+}
 
-    return dt;
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+fn update_camera () void
+{
+    if (!state.gui_capture_keyboard)
+    {
+        if (state.main_window.getKey (.q) == .press)
+        {
+            state.camera_rotation += 1 * state.delta_time;
+        }
+
+        if (state.main_window.getKey (.e) == .press)
+        {
+            state.camera_rotation -= 1 * state.delta_time;
+        }
+
+        if (state.main_window.getKey (.z) == .press)
+        {
+            state.camera_distance = @max (1, state.camera_distance - 16 * state.delta_time);
+        }
+
+        if (state.main_window.getKey (.x) == .press)
+        {
+            state.camera_distance = @min (250, state.camera_distance + 16 * state.delta_time);
+        }
+
+        if (state.main_window.getKey (.r) == .press)
+        {
+            state.camera_elevation = @max (1, state.camera_elevation - 16 * state.delta_time);
+        }
+
+        if (state.main_window.getKey (.f) == .press)
+        {
+            state.camera_elevation = @min (250, state.camera_elevation + 16 * state.delta_time);
+        }
+    }
+
+    const ca: f32 = @floatCast(@cos(state.camera_rotation));
+    const sa: f32 = @floatCast(@sin(state.camera_rotation));
+
+    if (!state.gui_capture_keyboard)
+    {
+        if (state.main_window.getKey (.w) == .press)
+        {
+            state.target_x -= 1 * ca;
+            state.target_y -= 1 * sa;
+        }
+
+        if (state.main_window.getKey (.s) == .press)
+        {
+            state.target_x += 1 * ca;
+            state.target_y += 1 * sa;
+        }
+
+        if (state.main_window.getKey (.a) == .press)
+        {
+            state.target_x -= 1 * sa;
+            state.target_y += 1 * ca;
+        }
+
+        if (state.main_window.getKey (.d) == .press)
+        {
+            state.target_x += 1 * sa;
+            state.target_y -= 1 * ca;
+        }
+    }
+
+    const cx = state.target_x + ca * state.camera_distance;
+    const cy = state.target_y + sa * state.camera_distance;
+    const cz = state.camera_elevation;
+
+    state.main_camera.position = .{ cx, cy, cz, 1 };
+    state.main_camera.target = .{ state.target_x, state.target_y, 1, 1 };
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -307,8 +402,8 @@ fn draw_fps() void {
 
     if (state.show_fps) {
         gui.setNextWindowSize(.{
-            .w = 200,
-            .h = 50,
+            .w = @floatFromInt (state.width),
+            .h = @floatFromInt (state.height),
         });
         gui.setNextWindowPos(.{
             .x = 0,
@@ -329,6 +424,8 @@ fn draw_fps() void {
             },
         })) {
             gui.text("fps: {d:0.0}", .{state.fps});
+            gui.text("target_x: {d:0.3}", .{state.target_x});
+            gui.text("target_y: {d:0.3}", .{state.target_y});
         }
         gui.end();
     }
@@ -522,18 +619,18 @@ fn create_terrain() !void {
     state.terrain_lines = try gfx.Mesh.init(state.allocator, .lines);
     errdefer state.terrain_lines.deinit();
 
-    var vertexes: [16 * 16]u32 = undefined;
+    var vertexes: [max_terrain_x * max_terrain_y]u32 = undefined;
 
-    for (0..16) |x| {
-        for (0..16) |y| {
+    for (0..max_terrain_x) |x| {
+        for (0..max_terrain_y) |y| {
             const fx: f32 = @floatFromInt(x);
             const fy: f32 = @floatFromInt(y);
             const h = state.height_map[y][x];
 
-            vertexes[x * 16 + y] = try state.terrain_mesh.addVertex(.{
+            vertexes[x * max_terrain_x + y] = try state.terrain_mesh.addVertex(.{
                 .pos = .{
-                    .x = 16 * fx,
-                    .y = 16 * fy,
+                    .x = terrain_cell_size * fx,
+                    .y = terrain_cell_size * fy,
                     .z = h,
                 },
                 .col = .{
@@ -545,12 +642,12 @@ fn create_terrain() !void {
         }
     }
 
-    for (0..15) |x| {
-        for (0..15) |y| {
-            const v1 = vertexes[x * 16 + y];
+    for (0..max_terrain_x-1) |x| {
+        for (0..max_terrain_y-1) |y| {
+            const v1 = vertexes[x * max_terrain_x + y];
             const v2 = v1 + 1;
-            const v3 = v1 + 16;
-            const v4 = v1 + 17;
+            const v3 = v1 + max_terrain_x;
+            const v4 = v1 + max_terrain_x + 1;
 
             try state.terrain_mesh.addIndex(v2);
             try state.terrain_mesh.addIndex(v1);
@@ -562,16 +659,16 @@ fn create_terrain() !void {
         }
     }
 
-    for (0..16) |x| {
-        for (0..16) |y| {
+    for (0..max_terrain_x) |x| {
+        for (0..max_terrain_y) |y| {
             const fx: f32 = @floatFromInt(x);
             const fy: f32 = @floatFromInt(y);
             const h = state.height_map[y][x];
 
-            vertexes[x * 16 + y] = try state.terrain_lines.addVertex(.{
+            vertexes[x * max_terrain_x + y] = try state.terrain_lines.addVertex(.{
                 .pos = .{
-                    .x = 16 * fx,
-                    .y = 16 * fy,
+                    .x = terrain_cell_size * fx,
+                    .y = terrain_cell_size * fy,
                     .z = h + 0.1,
                 },
                 .col = .{
@@ -583,12 +680,12 @@ fn create_terrain() !void {
         }
     }
 
-    for (0..15) |x| {
-        for (0..15) |y| {
-            const v1 = vertexes[x * 16 + y];
+    for (0..max_terrain_x-1) |x| {
+        for (0..max_terrain_y-1) |y| {
+            const v1 = vertexes[x * max_terrain_x + y];
             const v2 = v1 + 1;
-            const v3 = v1 + 16;
-            const v4 = v1 + 17;
+            const v3 = v1 + max_terrain_x;
+            const v4 = v1 + max_terrain_x + 1;
 
             try state.terrain_lines.addIndex(v1); try state.terrain_lines.addIndex(v2);
             try state.terrain_lines.addIndex(v2); try state.terrain_lines.addIndex(v4);
@@ -663,11 +760,6 @@ fn begin_3d() void {
         std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{ model[2][0], model[2][1], model[2][2], model[2][3] });
         std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{ model[3][0], model[3][1], model[3][2], model[3][3] });
     }
-
-    const ca: f32 = @floatCast(@cos(state.now/3));
-    const sa: f32 = @floatCast(@sin(state.now/5));
-    state.main_camera.position = .{ 8 * 16 + 48 * ca, 8 * 16 + 48 * sa, 2 * 16, 1 };
-    state.main_camera.target = .{ 8 * 16, 8 * 16, 1, 1 };
 
     const view = math.lookAtLh(
         state.main_camera.position,
