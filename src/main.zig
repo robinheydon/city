@@ -19,9 +19,16 @@ const rand = random.rand;
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-const max_terrain_x = 65;
-const max_terrain_y = 65;
-const terrain_cell_size = 16;
+const TerrainMesh = gfx.Mesh (gfx.TerrainVertex);
+const Mesh = gfx.Mesh (gfx.Vertex);
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+const max_terrain_x = 9;
+const max_terrain_y = 9;
+const terrain_cell_size = 32;
 
 pub const State = struct {
     main_window: *glfw.Window = undefined,
@@ -59,11 +66,12 @@ pub const State = struct {
 
     height_map: [max_terrain_y][max_terrain_x] f32 = undefined,
 
-    terrain_mesh: gfx.Mesh = undefined,
-    terrain_lines: gfx.Mesh = undefined,
-    axes: gfx.Mesh = undefined,
+    terrain_mesh: TerrainMesh = undefined,
+    terrain_lines: TerrainMesh = undefined,
+    axes: Mesh = undefined,
 
     basic_shader: gfx.Shader = undefined,
+    terrain_shader: gfx.Shader = undefined,
 
     main_camera: gfx.Camera = .{},
 };
@@ -125,7 +133,7 @@ pub fn main() !void {
     gl.debugMessageCallback(opengl_debug_message, null);
     gl.enable(gl.DEBUG_OUTPUT);
 
-    glfw.swapInterval(1);
+    glfw.swapInterval(0);
 
     _ = state.main_window.setKeyCallback(on_key);
     _ = state.main_window.setCharCallback(on_char);
@@ -153,9 +161,9 @@ pub fn main() !void {
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
     gl.clearDepth(1.0);
 
-    // gl.enable(gl.CULL_FACE);
-    // gl.cullFace(gl.BACK);
-    // gl.frontFace(gl.CW);
+    gl.enable(gl.CULL_FACE);
+    gl.cullFace(gl.BACK);
+    gl.frontFace(gl.CW);
     gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.DEPTH_TEST);
 
@@ -327,6 +335,15 @@ fn update_camera () void
             state.target_x += 1 * sa;
             state.target_y -= 1 * ca;
         }
+    }
+
+    if (state.main_window.getKey (.t) == .press)
+    {
+        state.target_x = terrain_cell_size * max_terrain_x / 2;
+        state.target_y = terrain_cell_size * max_terrain_y / 2;
+        state.camera_rotation = 0;
+        state.camera_elevation = 16;
+        state.camera_distance = 32;
     }
 
     const cx = state.target_x + ca * state.camera_distance;
@@ -606,9 +623,11 @@ const TracyAllocator = struct {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 const shader_source = @embedFile("shader.glsl");
+const terrain_source = @embedFile("terrain.glsl");
 
 fn create_shaders() !void {
     state.basic_shader = try gfx.Shader.init(state.allocator, shader_source);
+    state.terrain_shader = try gfx.Shader.init(state.allocator, terrain_source);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -616,31 +635,21 @@ fn create_shaders() !void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn create_terrain() !void {
-    state.terrain_mesh = try gfx.Mesh.init(state.allocator, .triangles);
+    state.terrain_mesh = try gfx.Mesh (gfx.TerrainVertex).init(state.allocator, .triangles);
     errdefer state.terrain_mesh.deinit();
 
-    state.terrain_lines = try gfx.Mesh.init(state.allocator, .lines);
+    state.terrain_lines = try gfx.Mesh (gfx.TerrainVertex).init(state.allocator, .lines);
     errdefer state.terrain_lines.deinit();
 
     var vertexes: [max_terrain_x * max_terrain_y]u32 = undefined;
 
     for (0..max_terrain_x) |x| {
         for (0..max_terrain_y) |y| {
-            const fx: f32 = @floatFromInt(x);
-            const fy: f32 = @floatFromInt(y);
             const h = state.height_map[y][x];
 
             vertexes[x * max_terrain_x + y] = try state.terrain_mesh.addVertex(.{
-                .pos = .{
-                    .x = terrain_cell_size * fx,
-                    .y = terrain_cell_size * fy,
-                    .z = h,
-                },
-                .col = .{
-                    .r = 0.3 * rand(f32),
-                    .g = 0.5 + 0.2 * rand(f32),
-                    .b = 0.3 * rand(f32),
-                },
+                .pos = .{ .x = 0, .y = 0, .z = h },
+                .col = .{ .r = 0, .g = 1, .b = 0 },
             });
         }
     }
@@ -660,51 +669,47 @@ fn create_terrain() !void {
             const v9 = v1 + max_terrain_x * 2 + 2;
 
             try state.terrain_mesh.addIndex(v5);
+            try state.terrain_mesh.addIndex(v2);
             try state.terrain_mesh.addIndex(v1);
-            try state.terrain_mesh.addIndex(v2);
-
-            try state.terrain_mesh.addIndex(v5);
-            try state.terrain_mesh.addIndex(v2);
-            try state.terrain_mesh.addIndex(v3);
 
             try state.terrain_mesh.addIndex(v5);
             try state.terrain_mesh.addIndex(v3);
-            try state.terrain_mesh.addIndex(v6);
+            try state.terrain_mesh.addIndex(v2);
 
             try state.terrain_mesh.addIndex(v5);
             try state.terrain_mesh.addIndex(v6);
-            try state.terrain_mesh.addIndex(v9);
+            try state.terrain_mesh.addIndex(v3);
 
             try state.terrain_mesh.addIndex(v5);
             try state.terrain_mesh.addIndex(v9);
-            try state.terrain_mesh.addIndex(v8);
+            try state.terrain_mesh.addIndex(v6);
 
             try state.terrain_mesh.addIndex(v5);
             try state.terrain_mesh.addIndex(v8);
-            try state.terrain_mesh.addIndex(v7);
+            try state.terrain_mesh.addIndex(v9);
 
             try state.terrain_mesh.addIndex(v5);
             try state.terrain_mesh.addIndex(v7);
-            try state.terrain_mesh.addIndex(v4);
+            try state.terrain_mesh.addIndex(v8);
 
             try state.terrain_mesh.addIndex(v5);
             try state.terrain_mesh.addIndex(v4);
+            try state.terrain_mesh.addIndex(v7);
+
+            try state.terrain_mesh.addIndex(v5);
             try state.terrain_mesh.addIndex(v1);
+            try state.terrain_mesh.addIndex(v4);
         }
     }
 
     for (0..max_terrain_x) |x| {
         for (0..max_terrain_y) |y| {
-            const fx: f32 = @floatFromInt(x);
-            const fy: f32 = @floatFromInt(y);
+            // const fx: f32 = @floatFromInt(x);
+            // const fy: f32 = @floatFromInt(y);
             const h = state.height_map[y][x];
 
             vertexes[x * max_terrain_x + y] = try state.terrain_lines.addVertex(.{
-                .pos = .{
-                    .x = terrain_cell_size * fx,
-                    .y = terrain_cell_size * fy,
-                    .z = h + 0.1,
-                },
+                .pos = .{ .x = 0, .y = 0, .z = h + 0.1 },
                 .col = .{
                     .r = 0,
                     .g = 0,
@@ -734,7 +739,7 @@ fn create_terrain() !void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn create_axes() !void {
-    state.axes = try gfx.Mesh.init(state.allocator, .lines);
+    state.axes = try Mesh.init(state.allocator, .lines);
     errdefer state.axes.deinit();
 
     {
@@ -778,9 +783,6 @@ fn create_axes() !void {
 fn begin_3d() void {
     const zone = tracy.ZoneNC(@src(), "begin_3d", 0x00_ff_00_00);
     defer zone.End();
-
-    state.basic_shader.use();
-    defer state.basic_shader.end();
 
     const model = math.identity();
 
@@ -832,9 +834,17 @@ fn begin_3d() void {
         std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{ projection[3][0], projection[3][1], projection[3][2], projection[3][3] });
     }
 
+    state.basic_shader.use();
     state.basic_shader.setUniformMat("model", model);
     state.basic_shader.setUniformMat("view", view);
     state.basic_shader.setUniformMat("projection", projection);
+    state.basic_shader.end();
+
+    state.terrain_shader.use();
+    state.terrain_shader.setUniformMat("model", model);
+    state.terrain_shader.setUniformMat("view", view);
+    state.terrain_shader.setUniformMat("projection", projection);
+    state.terrain_shader.end();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -860,22 +870,30 @@ fn draw_terrain() void {
     const zone = tracy.ZoneNC(@src(), "draw_terrain", 0x00_ff_00_00);
     defer zone.End();
 
-    if (state.show_terrain) {
-        state.basic_shader.use();
-        defer state.basic_shader.end();
-        if (state.show_wireframe)
-        {
-            gl.polygonMode (gl.FRONT_AND_BACK, gl.LINE);
-            state.terrain_mesh.render();
-            gl.polygonMode (gl.FRONT_AND_BACK, gl.FILL);
-        }
-        else
-        {
-            gl.polygonMode (gl.FRONT_AND_BACK, gl.FILL);
-            state.terrain_mesh.render();
-            state.terrain_lines.render();
-        }
+    if (!state.show_terrain) {
+        return;
     }
+
+    state.terrain_shader.use();
+    defer state.terrain_shader.end();
+
+    // show the terrain from the bottom - just in case somebody goes underground
+    gl.disable(gl.CULL_FACE);
+
+    if (state.show_wireframe)
+    {
+        gl.polygonMode (gl.FRONT_AND_BACK, gl.LINE);
+        state.terrain_mesh.render();
+        gl.polygonMode (gl.FRONT_AND_BACK, gl.FILL);
+    }
+    else
+    {
+        gl.polygonMode (gl.FRONT_AND_BACK, gl.FILL);
+        state.terrain_mesh.render();
+        state.terrain_lines.render();
+    }
+
+    gl.enable(gl.CULL_FACE);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
