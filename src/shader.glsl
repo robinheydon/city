@@ -30,7 +30,7 @@ in vec3 vtx_pos;
 void main ()
 {
     float dist = distance (camera_pos, vtx_pos);
-    float opacity = clamp (dist / 20000, 0, 1);
+    float opacity = clamp (dist / 16000, 0, 1);
 
     FragColor = mix (vtx_color, vec4 (0.4, 0.4, 0.4, 1), opacity);
 }
