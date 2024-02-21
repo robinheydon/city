@@ -60,11 +60,11 @@ pub const State = struct {
     now: f64 = 0,
     delta_time: f32 = 0,
 
-    target_x: f32 = 500,
-    target_y: f32 = 500,
+    target_x: f32 = 32 * 1024,
+    target_y: f32 = 32 * 1024,
     camera_rotation: f32 = 0,
     camera_elevation: f32 = 1000,
-    camera_angle: f32 = 90,
+    camera_angle: f32 = 45,
 
     isaac64: std.rand.Isaac64 = undefined, // rand.zig
     random: std.rand.Random = undefined,
@@ -74,9 +74,8 @@ pub const State = struct {
 
     height_map: [max_map_y / terrain_cell_size + 1][max_map_x / terrain_cell_size + 1]f32 = undefined,
 
-    terrain_lod: usize = 0,
-    terrain_mesh: [max_grid_y][max_grid_x][max_terrain_lod]TerrainMesh = undefined,
-    terrain_lines: [max_grid_y][max_grid_x][max_terrain_lod]TerrainMesh = undefined,
+    terrain_mesh: [max_grid_y][max_grid_x][max_terrain_lod]?TerrainMesh = undefined,
+    terrain_lines: [max_grid_y][max_grid_x][max_terrain_lod]?TerrainMesh = undefined,
     axes: Mesh = undefined,
 
     basic_shader: gfx.Shader = undefined,
@@ -230,7 +229,6 @@ pub fn main() !void {
 
         process_events();
 
-        update_lod();
         update_camera();
     }
 }
@@ -351,32 +349,32 @@ fn update_camera() void {
 
     if (!state.gui_capture_keyboard) {
         if (state.main_window.getKey(.w) == .press) {
-            state.target_x -= fast_multiplier * sa;
-            state.target_y -= fast_multiplier * ca;
+            state.target_x -= fast_multiplier * sa * state.camera_elevation / 100;
+            state.target_y -= fast_multiplier * ca * state.camera_elevation / 100;
         }
 
         if (state.main_window.getKey(.s) == .press) {
-            state.target_x += fast_multiplier * sa;
-            state.target_y += fast_multiplier * ca;
+            state.target_x += fast_multiplier * sa * state.camera_elevation / 100;
+            state.target_y += fast_multiplier * ca * state.camera_elevation / 100;
         }
 
         if (state.main_window.getKey(.a) == .press) {
-            state.target_x -= fast_multiplier * ca;
-            state.target_y += fast_multiplier * sa;
+            state.target_x -= fast_multiplier * ca * state.camera_elevation / 100;
+            state.target_y += fast_multiplier * sa * state.camera_elevation / 100;
         }
 
         if (state.main_window.getKey(.d) == .press) {
-            state.target_x += fast_multiplier * ca;
-            state.target_y -= fast_multiplier * sa;
+            state.target_x += fast_multiplier * ca * state.camera_elevation / 100;
+            state.target_y -= fast_multiplier * sa * state.camera_elevation / 100;
         }
     }
 
     if (state.main_window.getKey(.t) == .press) {
-        state.target_x = 500;
-        state.target_y = 500;
+        state.target_x = 32 * 1024;
+        state.target_y = 32 * 1024;
         state.camera_rotation = 0;
         state.camera_elevation = 1000;
-        state.camera_angle = 90;
+        state.camera_angle = 45;
     }
 
     const cx = state.target_x + sa * state.camera_elevation;
@@ -391,28 +389,6 @@ fn update_camera() void {
         1 + @cos(state.camera_angle / 180 * std.math.pi) * state.camera_elevation,
         1,
     };
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-fn update_lod() void {
-    if (!state.gui_capture_keyboard) {
-        if (state.main_window.getKey(.one) == .press) {
-            state.terrain_lod = 0;
-        } else if (state.main_window.getKey(.two) == .press) {
-            state.terrain_lod = 1;
-        } else if (state.main_window.getKey(.three) == .press) {
-            state.terrain_lod = 2;
-        } else if (state.main_window.getKey(.four) == .press) {
-            state.terrain_lod = 3;
-        } else if (state.main_window.getKey(.five) == .press) {
-            state.terrain_lod = 4;
-        } else if (state.main_window.getKey(.six) == .press) {
-            state.terrain_lod = 5;
-        }
-    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -709,139 +685,146 @@ fn create_terrain() !void {
     for (0..max_grid_y) |gy| {
         for (0..max_grid_x) |gx| {
             for (0..max_terrain_lod) |i| {
-                state.terrain_mesh[gy][gx][i] = try gfx.Mesh(gfx.TerrainVertex).init(
-                    state.allocator,
-                    .triangles,
-                );
-                state.terrain_lines[gy][gx][i] = try gfx.Mesh(gfx.TerrainVertex).init(
-                    state.allocator,
-                    .lines,
-                );
+                state.terrain_mesh[gy][gx][i] = null;
+                state.terrain_lines[gy][gx][i] = null;
             }
+            try create_terrain_grid (gx, gy, max_terrain_lod - 1);
         }
     }
+}
 
-    var vertexes: [65 * 65]u32 = undefined;
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
 
-    // 5 : 512 -> 3
-    // 4 : 256 -> 5
-    // 3 : 128 -> 9
-    // 2 : 64 -> 17
-    // 1 : 32 -> 33
-    // 0 : 16 -> 65
+fn create_terrain_grid (gx: usize, gy: usize, lod: usize) !void
+{
+    if (state.terrain_mesh[gy][gx][lod] == null)
+    {
+        var mesh1 = try gfx.Mesh(gfx.TerrainVertex).init(
+            state.allocator,
+            .triangles,
+        );
+        errdefer mesh1.deinit ();
 
-    for (0..max_grid_y) |gy| {
-        for (0..max_grid_x) |gx| {
-            for (0..max_terrain_lod) |i| {
-                const max = @shrExact(@as(u32, @intCast(1024 / 16)), @intCast(i)) + 1;
-                const step = @as(u32, 1) << @intCast(i);
-                for (0..max) |x| {
-                    for (0..max) |y| {
-                        const fx: f32 = @floatFromInt(x * terrain_cell_size * step + gx * 1024);
-                        const fy: f32 = @floatFromInt(y * terrain_cell_size * step + gy * 1024);
-                        const h = state.height_map[y * step + gy * 64][x * step + gx * 64];
+        const mesh2 = try gfx.Mesh(gfx.TerrainVertex).init(
+            state.allocator,
+            .lines,
+        );
 
-                        var r: f32 = 0;
-                        var g: f32 = 0;
-                        var b: f32 = 0;
+        state.terrain_mesh[gy][gx][lod] = mesh1;
+        state.terrain_lines[gy][gx][lod] = mesh2;
 
-                        if (h == 0) {
-                            b = 1;
-                        } else {
-                            r = h / 1500 + rand(f32) * 0.2;
-                            g = 0.6 + rand(f32) * 0.3;
-                            b = h / 1500 + rand(f32) * 0.2;
-                        }
+        var vertexes: [65 * 65]u32 = undefined;
 
-                        vertexes[x * max + y] = try state.terrain_mesh[gy][gx][i].addVertex(.{
-                            .pos = .{ .x = fx, .y = fy, .z = h },
-                            .col = .{ .r = r, .g = g, .b = b },
-                        });
-                    }
+        const max = @shrExact(@as(u32, @intCast(1024 / 16)), @intCast(lod)) + 1;
+        const step = @as(u32, 1) << @intCast(lod);
+
+        for (0..max) |x| {
+            for (0..max) |y| {
+                const fx: f32 = @floatFromInt(x * terrain_cell_size * step + gx * 1024);
+                const fy: f32 = @floatFromInt(y * terrain_cell_size * step + gy * 1024);
+                const h = state.height_map[y * step + gy * 64][x * step + gx * 64];
+
+                var r: f32 = 0;
+                var g: f32 = 0;
+                var b: f32 = 0;
+
+                if (h == 0) {
+                    b = 1;
+                } else {
+                    r = h / 1500 + rand(f32) * 0.2;
+                    g = 0.6 + rand(f32) * 0.3;
+                    b = h / 1500 + rand(f32) * 0.2;
                 }
 
-                for (0..max / 2) |hx| {
-                    for (0..max / 2) |hy| {
-                        const x = hx * 2;
-                        const y = hy * 2;
-                        const v1 = vertexes[x * max + y];
-                        const v2 = v1 + 1;
-                        const v3 = v1 + 2;
-                        const v4 = v1 + max + 0;
-                        const v5 = v1 + max + 1;
-                        const v6 = v1 + max + 2;
-                        const v7 = v1 + max * 2 + 0;
-                        const v8 = v1 + max * 2 + 1;
-                        const v9 = v1 + max * 2 + 2;
+                vertexes[x * max + y] = try state.terrain_mesh[gy][gx][lod].?.addVertex(.{
+                    .pos = .{ .x = fx, .y = fy, .z = h },
+                    .col = .{ .r = r, .g = g, .b = b },
+                });
+            }
+        }
 
-                        try state.terrain_mesh[gy][gx][i].addIndex(v5);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v2);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v1);
+        for (0..max / 2) |hx| {
+            for (0..max / 2) |hy| {
+                const x = hx * 2;
+                const y = hy * 2;
+                const v1 = vertexes[x * max + y];
+                const v2 = v1 + 1;
+                const v3 = v1 + 2;
+                const v4 = v1 + max + 0;
+                const v5 = v1 + max + 1;
+                const v6 = v1 + max + 2;
+                const v7 = v1 + max * 2 + 0;
+                const v8 = v1 + max * 2 + 1;
+                const v9 = v1 + max * 2 + 2;
 
-                        try state.terrain_mesh[gy][gx][i].addIndex(v5);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v3);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v2);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v5);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v2);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v1);
 
-                        try state.terrain_mesh[gy][gx][i].addIndex(v5);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v6);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v3);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v5);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v3);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v2);
 
-                        try state.terrain_mesh[gy][gx][i].addIndex(v5);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v9);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v6);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v5);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v6);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v3);
 
-                        try state.terrain_mesh[gy][gx][i].addIndex(v5);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v8);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v9);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v5);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v9);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v6);
 
-                        try state.terrain_mesh[gy][gx][i].addIndex(v5);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v7);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v8);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v5);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v8);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v9);
 
-                        try state.terrain_mesh[gy][gx][i].addIndex(v5);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v4);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v7);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v5);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v7);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v8);
 
-                        try state.terrain_mesh[gy][gx][i].addIndex(v5);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v1);
-                        try state.terrain_mesh[gy][gx][i].addIndex(v4);
-                    }
-                }
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v5);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v4);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v7);
 
-                for (0..max) |x| {
-                    for (0..max) |y| {
-                        const fx: f32 = @floatFromInt(x * terrain_cell_size * step + gx * 1024);
-                        const fy: f32 = @floatFromInt(y * terrain_cell_size * step + gy * 1024);
-                        const h = state.height_map[y * step + gy * 64][x * step + gx * 64];
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v5);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v1);
+                try state.terrain_mesh[gy][gx][lod].?.addIndex(v4);
+            }
+        }
 
-                        vertexes[x * max + y] = try state.terrain_lines[gy][gx][i].addVertex(.{
-                            .pos = .{ .x = fx, .y = fy, .z = h + 0 },
-                            .col = .{
-                                .r = 0,
-                                .g = 0,
-                                .b = 0,
-                            },
-                        });
-                    }
-                }
+        for (0..max) |x| {
+            for (0..max) |y| {
+                const fx: f32 = @floatFromInt(x * terrain_cell_size * step + gx * 1024);
+                const fy: f32 = @floatFromInt(y * terrain_cell_size * step + gy * 1024);
+                const h = state.height_map[y * step + gy * 64][x * step + gx * 64];
 
-                for (0..max - 1) |x| {
-                    for (0..max - 1) |y| {
-                        const v1 = vertexes[x * max + y];
-                        const v2 = v1 + 1;
-                        const v3 = v1 + max;
-                        const v4 = v1 + max + 1;
+                vertexes[x * max + y] = try state.terrain_lines[gy][gx][lod].?.addVertex(.{
+                    .pos = .{ .x = fx, .y = fy, .z = h + 0 },
+                    .col = .{
+                        .r = 0,
+                        .g = 0,
+                        .b = 0,
+                    },
+                });
+            }
+        }
 
-                        try state.terrain_lines[gy][gx][i].addIndex(v1);
-                        try state.terrain_lines[gy][gx][i].addIndex(v2);
-                        try state.terrain_lines[gy][gx][i].addIndex(v2);
-                        try state.terrain_lines[gy][gx][i].addIndex(v4);
-                        try state.terrain_lines[gy][gx][i].addIndex(v4);
-                        try state.terrain_lines[gy][gx][i].addIndex(v3);
-                        try state.terrain_lines[gy][gx][i].addIndex(v3);
-                        try state.terrain_lines[gy][gx][i].addIndex(v1);
-                    }
-                }
+        for (0..max - 1) |x| {
+            for (0..max - 1) |y| {
+                const v1 = vertexes[x * max + y];
+                const v2 = v1 + 1;
+                const v3 = v1 + max;
+                const v4 = v1 + max + 1;
+
+                try state.terrain_lines[gy][gx][lod].?.addIndex(v1);
+                try state.terrain_lines[gy][gx][lod].?.addIndex(v2);
+                try state.terrain_lines[gy][gx][lod].?.addIndex(v2);
+                try state.terrain_lines[gy][gx][lod].?.addIndex(v4);
+                try state.terrain_lines[gy][gx][lod].?.addIndex(v4);
+                try state.terrain_lines[gy][gx][lod].?.addIndex(v3);
+                try state.terrain_lines[gy][gx][lod].?.addIndex(v3);
+                try state.terrain_lines[gy][gx][lod].?.addIndex(v1);
             }
         }
     }
@@ -855,8 +838,14 @@ fn delete_terrain() void {
     for (0..max_grid_y) |gy| {
         for (0..max_grid_x) |gx| {
             for (0..max_terrain_lod) |i| {
-                state.terrain_mesh[gy][gx][i].deinit();
-                state.terrain_lines[gy][gx][i].deinit();
+                if (state.terrain_mesh[gy][gx][i]) |*grid|
+                {
+                    grid.deinit();
+                }
+                if (state.terrain_lines[gy][gx][i]) |*grid|
+                {
+                    grid.deinit();
+                }
             }
         }
     }
@@ -1017,26 +1006,81 @@ fn draw_terrain() void {
     // show the terrain from the bottom - just in case somebody goes underground
     gl.disable(gl.CULL_FACE);
 
-    var camera_grid_x : i64 = @intFromFloat (state.main_camera.position[0] / 1024);
-    var camera_grid_y : i64 = @intFromFloat (state.main_camera.position[1] / 1024);
+    var number_mesh_loaded : usize = 0;
 
-    camera_grid_x = @min (max_grid_x, @max (0, camera_grid_x));
-    camera_grid_y = @min (max_grid_y, @max (0, camera_grid_y));
-
-    for (0..2) |gy|
+    for (0..64) |gy|
     {
-        for (0..2) |gx|
+        for (0..64) |gx|
         {
+            const dx = state.main_camera.position[0] - @as (f32, @floatFromInt (gx * 1024 + 512));
+            const dy = state.main_camera.position[1] - @as (f32, @floatFromInt (gy * 1024 + 512));
+
+            const dist = @sqrt (dx * dx + dy * dy);
+
+            var lod : usize = 0;
+
+            if (dist < 3000) {
+                lod = 0;
+            } else if (dist < 5000) {
+                lod = 1;
+            } else if (dist < 7000) {
+                lod = 2;
+            } else if (dist < 10000) {
+                lod = 3;
+            } else if (dist < 14000) {
+                lod = 4;
+            } else if (dist < 18000) {
+                lod = 5;
+            }
+            else {
+                continue;
+            }
+
+            if (state.terrain_mesh[gy][gx][lod] == null)
+            {
+                if (number_mesh_loaded < 16)
+                {
+                    var this_lod = lod;
+                    while (this_lod < max_terrain_lod)
+                    {
+                        create_terrain_grid (gx, gy, this_lod) catch {};
+                        number_mesh_loaded += 1;
+                        this_lod += 1;
+                    }
+                }
+                else
+                {
+                    while (lod < max_terrain_lod)
+                    {
+                        if (state.terrain_mesh[gy][gx][lod] != null)
+                        {
+                            break;
+                        }
+                        lod += 1;
+                    }
+                }
+            }
+
             if (gy >= 0 and gy < max_grid_y and gx >= 0 and gx <= max_grid_x)
             {
                 if (state.show_wireframe) {
-                    gl.polygonMode(gl.FRONT_AND_BACK, gl.LINE);
-                    state.terrain_mesh[gy][gx][state.terrain_lod].render();
+                    if (state.terrain_mesh[gy][gx][lod]) |*grid|
+                    {
+                        gl.polygonMode(gl.FRONT_AND_BACK, gl.LINE);
+                        grid.render();
+                    }
                 } else {
-                    gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
-                    state.terrain_mesh[gy][gx][state.terrain_lod].render();
+                    if (state.terrain_mesh[gy][gx][lod]) |*grid|
+                    {
+                        gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
+                        grid.render();
+                    }
                     if (state.show_grid) {
-                        state.terrain_lines[gy][gx][state.terrain_lod].render();
+                        if (state.terrain_lines[gy][gx][lod]) |*grid|
+                        {
+                            gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
+                            grid.render ();
+                        }
                     }
                 }
             }
