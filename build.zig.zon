@@ -7,6 +7,7 @@
         .zgui = .{ .path = "zig-gamedev/libs/zgui" },
         .zmath = .{ .path = "zig-gamedev/libs/zmath" },
         .zopengl = .{ .path = "zig-gamedev/libs/zopengl" },
+        .zstbi = .{ .path = "zig-gamedev/libs/zstbi" },
         .ztracy = .{ .path = "zig-gamedev/libs/ztracy" },
     },
     .paths = .{ "", },
