@@ -33,7 +33,18 @@ void main ()
     float dist = distance (camera_pos, vtx_pos);
     float opacity = clamp (dist / 16000, 0, 1);
 
-    FragColor = mix (vtx_color, vec4 (0.4, 0.4, 0.4, 1), opacity);
+    if (vtx_pos.z <= 1)
+    {
+        FragColor = mix (vtx_color, vec4 (0.0, 0.0, 0.5, 1), opacity);
+    }
+    else if (mod (vtx_pos.z, 20) < 1)
+    {
+        FragColor = mix (vec4 (0, 0, 0, 1), vec4 (0.4, 0.4, 0.4, 1), opacity);
+    }
+    else
+    {
+        FragColor = mix (vtx_color, vec4 (0.4, 0.4, 0.4, 1), opacity);
+    }
 }
 
 

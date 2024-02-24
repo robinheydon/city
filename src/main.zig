@@ -220,6 +220,7 @@ pub fn main() !void {
         draw_terrain();
 
         draw_gui();
+        draw_frame_times();
 
         {
             const zone = tracy.ZoneNC(@src(), "swapBuffers", 0x00_00_ff_00);
@@ -492,6 +493,13 @@ fn draw_fps() void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
+fn draw_frame_times () void {
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
 fn input_text_callback(data: *gui.InputTextCallbackData) i32 {
     const zone = tracy.ZoneNC(@src(), "input_text_callback", 0x00_ff_00_00);
     defer zone.End();
@@ -733,9 +741,9 @@ fn create_terrain_grid (gx: usize, gy: usize, lod: usize) !void
                 if (h == 0) {
                     b = 1;
                 } else {
-                    r = h / 1500 + rand(f32) * 0.2;
-                    g = 0.6 + rand(f32) * 0.3;
-                    b = h / 1500 + rand(f32) * 0.2;
+                    r = h / 1500;
+                    g = 0.8;
+                    b = h / 1500;
                 }
 
                 vertexes[x * max + y] = try state.terrain_mesh[gy][gx][lod].?.addVertex(.{
@@ -1021,15 +1029,15 @@ fn draw_terrain() void {
 
             if (dist < 3000) {
                 lod = 0;
-            } else if (dist < 5000) {
+            } else if (dist < 4000) {
                 lod = 1;
-            } else if (dist < 7000) {
+            } else if (dist < 5000) {
                 lod = 2;
-            } else if (dist < 10000) {
+            } else if (dist < 6000) {
                 lod = 3;
-            } else if (dist < 14000) {
+            } else if (dist < 7000) {
                 lod = 4;
-            } else if (dist < 18000) {
+            } else if (dist < 16000) {
                 lod = 5;
             }
             else {
