@@ -91,6 +91,8 @@ pub fn Mesh(comptime T: type) type {
         vbo: gl.Uint, // vertex buffer object (the vertex data itself)
         ebo: gl.Uint, // element buffer object (indexes into vertexes)
 
+        vbo_empty: bool = true,
+        ebo_empty: bool = true,
         vbo_dirty: bool = true,
         ebo_dirty: bool = true,
 
@@ -154,13 +156,18 @@ pub fn Mesh(comptime T: type) type {
             self.ebo_dirty = true;
         }
 
+        pub fn reset (self: *Self) !void {
+            self.vertexes.clearRetainingCapacity ();
+            self.indexes.clearRetainingCapacity ();
+        }
+
         pub fn render(self: *Self) void {
             const zone = tracy.ZoneNC(@src(), "mesh.render", 0x00_80_80_80);
             defer zone.End();
 
             gl.bindVertexArray(self.vao);
 
-            if (self.vbo_dirty) {
+            if (self.vbo_empty) {
                 const dirty_zone = tracy.ZoneNC(@src(), "vbo_dirty", 0x00_80_80_80);
                 defer dirty_zone.End();
 
@@ -169,12 +176,27 @@ pub fn Mesh(comptime T: type) type {
                     gl.ARRAY_BUFFER,
                     @intCast(self.vertexes.items.len * @sizeOf(@TypeOf(self.vertexes.items[0]))),
                     &self.vertexes.items[0],
-                    gl.STATIC_DRAW,
+                    gl.STREAM_DRAW,
+                );
+                self.vbo_empty = false;
+                self.vbo_dirty = false;
+            }
+
+            if (self.vbo_dirty) {
+                const dirty_zone = tracy.ZoneNC(@src(), "vbo_dirty", 0x00_80_80_80);
+                defer dirty_zone.End();
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, self.vbo);
+                gl.bufferSubData(
+                    gl.ARRAY_BUFFER,
+                    0,
+                    @intCast(self.vertexes.items.len * @sizeOf(@TypeOf(self.vertexes.items[0]))),
+                    &self.vertexes.items[0],
                 );
                 self.vbo_dirty = false;
             }
 
-            if (self.ebo_dirty) {
+            if (self.ebo_empty) {
                 const dirty_zone = tracy.ZoneNC(@src(), "ebo_dirty", 0x00_80_80_80);
                 defer dirty_zone.End();
 
@@ -183,7 +205,22 @@ pub fn Mesh(comptime T: type) type {
                     gl.ELEMENT_ARRAY_BUFFER,
                     @intCast(self.indexes.items.len * @sizeOf(@TypeOf(self.indexes.items[0]))),
                     &self.indexes.items[0],
-                    gl.STATIC_DRAW,
+                    gl.STREAM_DRAW,
+                );
+                self.ebo_empty = false;
+                self.ebo_dirty = false;
+            }
+
+            if (self.ebo_dirty) {
+                const dirty_zone = tracy.ZoneNC(@src(), "ebo_dirty", 0x00_80_80_80);
+                defer dirty_zone.End();
+
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, self.ebo);
+                gl.bufferSubData(
+                    gl.ELEMENT_ARRAY_BUFFER,
+                    0,
+                    @intCast(self.indexes.items.len * @sizeOf(@TypeOf(self.indexes.items[0]))),
+                    &self.indexes.items[0],
                 );
                 self.ebo_dirty = false;
             }
