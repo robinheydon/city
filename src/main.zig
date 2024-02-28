@@ -340,11 +340,11 @@ fn update_camera() void {
 
     if (!state.gui_capture_keyboard) {
         if (state.main_window.getKey(.t) == .press) {
-            state.target_x = 32 * 1024;
-            state.target_y = 32 * 1024;
-            state.camera_yaw = 0;
-            state.camera_pitch = 45;
-            state.camera_zoom = 2000;
+            state.target_x = default_map_x;
+            state.target_y = default_map_y;
+            state.camera_yaw = default_camera_yaw;
+            state.camera_pitch = default_camera_pitch;
+            state.camera_zoom = default_camera_zoom;
         }
 
         if (state.main_window.getKey(.q) == .press) {
@@ -391,23 +391,23 @@ fn update_camera() void {
 
     if (!state.gui_capture_keyboard) {
         if (state.main_window.getKey(.w) == .press) {
-            state.target_x -= fast_multiplier * sy * state.camera_zoom / 100;
-            state.target_y -= fast_multiplier * cy * state.camera_zoom / 100;
+            state.target_x -= fast_multiplier * sy * 100 * state.delta_time;
+            state.target_y -= fast_multiplier * cy * 100 * state.delta_time;
         }
 
         if (state.main_window.getKey(.s) == .press) {
-            state.target_x += fast_multiplier * sy * state.camera_zoom / 100;
-            state.target_y += fast_multiplier * cy * state.camera_zoom / 100;
+            state.target_x += fast_multiplier * sy * 100 * state.delta_time;
+            state.target_y += fast_multiplier * cy * 100 * state.delta_time;
         }
 
         if (state.main_window.getKey(.a) == .press) {
-            state.target_x -= fast_multiplier * cy * state.camera_zoom / 100;
-            state.target_y += fast_multiplier * sy * state.camera_zoom / 100;
+            state.target_x -= fast_multiplier * cy * 100 * state.delta_time;
+            state.target_y += fast_multiplier * sy * 100 * state.delta_time;
         }
 
         if (state.main_window.getKey(.d) == .press) {
-            state.target_x += fast_multiplier * cy * state.camera_zoom / 100;
-            state.target_y -= fast_multiplier * sy * state.camera_zoom / 100;
+            state.target_x += fast_multiplier * cy * 100 * state.delta_time;
+            state.target_y -= fast_multiplier * sy * 100 * state.delta_time;
         }
     }
 
@@ -1000,7 +1000,7 @@ fn begin_3d() void {
     const aspect = width / height;
 
     const near: f32 = 1;
-    const far: f32 = 30000;
+    const far: f32 = 16000;
 
     const projection = math.perspectiveFovLhGl(std.math.pi / 3.0, aspect, near, far);
 
