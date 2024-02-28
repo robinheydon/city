@@ -372,11 +372,11 @@ fn update_camera() void {
         }
 
         if (state.main_window.getKey(.z) == .press) {
-            state.camera_zoom = @max(5, state.camera_zoom - fast_multiplier * 128 * state.delta_time);
+            state.camera_zoom = @max(15, state.camera_zoom - fast_multiplier * 128 * state.delta_time);
         }
 
         if (state.main_window.getKey(.x) == .press) {
-            state.camera_zoom = @min(10000, state.camera_zoom + fast_multiplier * 128 * state.delta_time);
+            state.camera_zoom = @min(2000, state.camera_zoom + fast_multiplier * 128 * state.delta_time);
         }
     }
 
