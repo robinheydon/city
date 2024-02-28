@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) void {
     const zstbi_pkg = zstbi.package (b, target, optimize, .{});
     const ztracy_pkg = ztracy.package (b, target, optimize, .{
         .options = .{
-            .enable_ztracy = true,
+            .enable_ztracy = false,
         },
     });
 

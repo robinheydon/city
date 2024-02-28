@@ -30,6 +30,12 @@ const Mesh = gfx.Mesh(gfx.Vertex);
 const max_map_x = 64 * 1024;
 const max_map_y = 64 * 1024;
 
+const default_map_x = 32 * 1024;
+const default_map_y = 32 * 1024;
+const default_camera_yaw = 0;
+const default_camera_pitch = 45;
+const default_camera_zoom = 400;
+
 const terrain_cell_size = 16;
 
 pub const State = struct {
@@ -42,7 +48,7 @@ pub const State = struct {
     show_fps: bool = true,
     show_terrain: bool = true,
     show_axes: bool = false,
-    show_wireframe: bool = true,
+    show_wireframe: bool = false,
     show_grid: bool = false,
 
     gui_capture_mouse: bool = false,
@@ -57,11 +63,11 @@ pub const State = struct {
     now: f64 = 0,
     delta_time: f32 = 0,
 
-    target_x: f32 = 32 * 1024,
-    target_y: f32 = 32 * 1024,
-    camera_rotation: f32 = 0,
-    camera_elevation: f32 = 2000,
-    camera_angle: f32 = 45,
+    target_x: f32 = default_map_x,
+    target_y: f32 = default_map_y,
+    camera_yaw: f32 = default_camera_yaw,
+    camera_pitch: f32 = default_camera_pitch,
+    camera_zoom: f32 = default_camera_zoom,
 
     isaac64: std.rand.Isaac64 = undefined, // rand.zig
     random: std.rand.Random = undefined,
@@ -71,7 +77,7 @@ pub const State = struct {
 
     height_map: [max_map_y / terrain_cell_size + 1][max_map_x / terrain_cell_size + 1]f32 = undefined,
 
-    terrain_lod: usize = 5,
+    terrain_lod: usize = 4,
 
     terrain_generation_requested: bool = false,
     terrain_generation_ready: bool = false,
@@ -112,8 +118,8 @@ pub fn main() !void {
     var tracy_allocator = TracyAllocator{ .child_allocator = gpa.allocator() };
     state.allocator = tracy_allocator.allocator();
 
-    std.debug.print("City\n", .{});
-    std.debug.print("  cpus = {}\n", .{try std.Thread.getCpuCount()});
+    // std.debug.print("City\n", .{});
+    // std.debug.print("  cpus = {}\n", .{try std.Thread.getCpuCount()});
 
     random.init();
 
@@ -330,87 +336,106 @@ fn update_delta_time() void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn update_camera() void {
-    const fast_multiplier: f32 = if (state.main_window.getKey(.left_shift) == .press) 4 else 1;
+    const fast_multiplier: f32 = if (state.main_window.getKey(.left_shift) == .press) 4 else if (state.main_window.getKey (.left_control) == .press) 0.1 else 1;
 
     if (!state.gui_capture_keyboard) {
         if (state.main_window.getKey(.t) == .press) {
             state.target_x = 32 * 1024;
             state.target_y = 32 * 1024;
-            state.camera_rotation = 0;
-            state.camera_elevation = 2000;
-            state.camera_angle = 45;
+            state.camera_yaw = 0;
+            state.camera_pitch = 45;
+            state.camera_zoom = 2000;
         }
 
         if (state.main_window.getKey(.q) == .press) {
-            state.camera_rotation += 45 * fast_multiplier * state.delta_time;
+            state.camera_yaw += 45 * fast_multiplier * state.delta_time;
 
-            if (state.camera_rotation >= 360) {
-                state.camera_rotation -= 360;
+            if (state.camera_yaw >= 360) {
+                state.camera_yaw -= 360;
             }
         }
 
         if (state.main_window.getKey(.e) == .press) {
-            state.camera_rotation -= 45 * fast_multiplier * state.delta_time;
+            state.camera_yaw -= 45 * fast_multiplier * state.delta_time;
 
-            if (state.camera_rotation < 0) {
-                state.camera_rotation += 360;
+            if (state.camera_yaw < 0) {
+                state.camera_yaw += 360;
             }
         }
 
         if (state.main_window.getKey(.f) == .press) {
-            state.camera_angle = @max(5, state.camera_angle - fast_multiplier * 16 * state.delta_time);
+            state.camera_pitch = @max(5, state.camera_pitch - fast_multiplier * 16 * state.delta_time);
         }
 
         if (state.main_window.getKey(.r) == .press) {
-            state.camera_angle = @min(85, state.camera_angle + fast_multiplier * 16 * state.delta_time);
+            state.camera_pitch = @min(85, state.camera_pitch + fast_multiplier * 16 * state.delta_time);
         }
 
         if (state.main_window.getKey(.z) == .press) {
-            state.camera_elevation = @max(1, state.camera_elevation - fast_multiplier * 128 * state.delta_time);
+            state.camera_zoom = @max(5, state.camera_zoom - fast_multiplier * 128 * state.delta_time);
         }
 
         if (state.main_window.getKey(.x) == .press) {
-            state.camera_elevation = @min(10000, state.camera_elevation + fast_multiplier * 128 * state.delta_time);
+            state.camera_zoom = @min(10000, state.camera_zoom + fast_multiplier * 128 * state.delta_time);
         }
     }
 
-    const rotation = state.camera_rotation * std.math.pi / 180;
+    const yaw = state.camera_yaw * std.math.pi / 180;
+    const pitch = state.camera_pitch * std.math.pi / 180;
 
-    const sa: f32 = @floatCast(@sin(rotation));
-    const ca: f32 = @floatCast(@cos(rotation));
+    const sy: f32 = @floatCast(@sin(yaw));
+    const cy: f32 = @floatCast(@cos(yaw));
+
+    const sp: f32 = @floatCast(@sin(pitch));
+    const cp: f32 = @floatCast(@cos(pitch));
 
     if (!state.gui_capture_keyboard) {
         if (state.main_window.getKey(.w) == .press) {
-            state.target_x -= fast_multiplier * sa * state.camera_elevation / 100;
-            state.target_y -= fast_multiplier * ca * state.camera_elevation / 100;
+            state.target_x -= fast_multiplier * sy * state.camera_zoom / 100;
+            state.target_y -= fast_multiplier * cy * state.camera_zoom / 100;
         }
 
         if (state.main_window.getKey(.s) == .press) {
-            state.target_x += fast_multiplier * sa * state.camera_elevation / 100;
-            state.target_y += fast_multiplier * ca * state.camera_elevation / 100;
+            state.target_x += fast_multiplier * sy * state.camera_zoom / 100;
+            state.target_y += fast_multiplier * cy * state.camera_zoom / 100;
         }
 
         if (state.main_window.getKey(.a) == .press) {
-            state.target_x -= fast_multiplier * ca * state.camera_elevation / 100;
-            state.target_y += fast_multiplier * sa * state.camera_elevation / 100;
+            state.target_x -= fast_multiplier * cy * state.camera_zoom / 100;
+            state.target_y += fast_multiplier * sy * state.camera_zoom / 100;
         }
 
         if (state.main_window.getKey(.d) == .press) {
-            state.target_x += fast_multiplier * ca * state.camera_elevation / 100;
-            state.target_y -= fast_multiplier * sa * state.camera_elevation / 100;
+            state.target_x += fast_multiplier * cy * state.camera_zoom / 100;
+            state.target_y -= fast_multiplier * sy * state.camera_zoom / 100;
         }
     }
 
-    const cx = state.target_x + sa * state.camera_elevation;
-    const cy = state.target_y + ca * state.camera_elevation;
-    const cz = state.camera_elevation;
+    state.target_x = @min (max_map_x, @max (0, state.target_x));
+    state.target_y = @min (max_map_y, @max (0, state.target_y));
 
-    state.main_camera.position = .{ cx, cy, cz, 1 };
+    const target_z = get_worst_elevation(state.target_x, state.target_y) + 4;
+
+    // yaw
+
+    const px = state.target_x + sy * state.camera_zoom * cp;
+    const py = state.target_y + cy * state.camera_zoom * cp;
+    const pz = target_z + sp * state.camera_zoom;
+
+    const ch = get_worst_elevation(px, py);
+
+    if (pz < ch + 4) {
+        state.main_camera.position = .{ px, py, ch + 4, 1 };
+    }
+    else
+    {
+        state.main_camera.position = .{ px, py, pz, 1 };
+    }
 
     state.main_camera.target = .{
         state.target_x,
         state.target_y,
-        1 + @cos(state.camera_angle * std.math.pi / 180) * state.camera_elevation,
+        target_z,
         1,
     };
 }
@@ -504,9 +529,15 @@ fn draw_fps() void {
             gui.text("fps: {d:0.0}", .{state.fps});
             gui.text("target_x: {d:0.3}", .{state.target_x});
             gui.text("target_y: {d:0.3}", .{state.target_y});
-            gui.text("camera_rotation: {d:0.3}", .{state.camera_rotation});
-            gui.text("camera_elevation: {d:0.3}", .{state.camera_elevation});
-            gui.text("camera_angle: {d:0.3}", .{state.camera_angle});
+            gui.text("camera_yaw: {d:0.3}", .{state.camera_yaw});
+            gui.text("camera_pitch: {d:0.3}", .{state.camera_pitch});
+            gui.text("camera_zoom: {d:0.3}", .{state.camera_zoom});
+            gui.text("camera_x: {d:0.3}", .{state.main_camera.position[0]});
+            gui.text("camera_y: {d:0.3}", .{state.main_camera.position[1]});
+            gui.text("camera_z: {d:0.3}", .{state.main_camera.position[2]});
+            gui.text("target_x: {d:0.3}", .{state.main_camera.target[0]});
+            gui.text("target_y: {d:0.3}", .{state.main_camera.target[1]});
+            gui.text("target_z: {d:0.3}", .{state.main_camera.target[2]});
         }
         gui.end();
     }
@@ -725,6 +756,26 @@ fn create_shaders() !void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
+fn get_worst_elevation(x: f32, y: f32) f32 {
+    const hmx: i32 = @intFromFloat(x / terrain_cell_size);
+    const hmy: i32 = @intFromFloat(y / terrain_cell_size);
+    const mx: usize = @max(0, @min(4095, hmx));
+    const my: usize = @max(0, @min(4095, hmy));
+
+    const h1 = state.height_map[my][mx];
+    const h2 = state.height_map[my][mx + 1];
+    const h3 = state.height_map[my + 1][mx];
+    const h4 = state.height_map[my + 1][mx + 1];
+
+    const h = @max(@max(h1, h2), @max(h3, h4));
+
+    return h;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
 fn create_terrain() !void {
     for (0..2) |index| {
         var mesh = try gfx.Mesh(gfx.TerrainVertex).init(
@@ -737,7 +788,7 @@ fn create_terrain() !void {
         state.terrain_mesh[index] = mesh;
     }
 
-    debug_terrain_status ("create");
+    debug_terrain_status("create");
 
     request_terrain_generation();
 }
@@ -749,7 +800,7 @@ fn create_terrain() !void {
 fn request_terrain_generation() void {
     state.terrain_generation_requested = true;
     if (state.terrain_mesh[state.terrain_frame_index +% 1]) |*mesh| {
-        mesh.reset () catch {};
+        mesh.reset() catch {};
         _ = mesh.get_vbo_memory();
         _ = mesh.get_ebo_memory();
     }
@@ -771,8 +822,6 @@ fn create_terrain_mesh_thread() void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-var last_number_tris: usize = 0;
-
 fn create_terrain_mesh() !void {
     const zone = tracy.ZoneNC(@src(), "create_terrain_mesh", 0x00_ff_00_00);
     defer zone.End();
@@ -783,7 +832,7 @@ fn create_terrain_mesh() !void {
 
     const index = state.terrain_frame_index +% 1;
 
-    debug_terrain_status ("Generating");
+    debug_terrain_status("Generating");
 
     if (state.terrain_mesh[index]) |*mesh| {
         const grid_size: f32 = @floatFromInt(@as(u32, 16) << @intCast(state.terrain_lod));
@@ -796,29 +845,20 @@ fn create_terrain_mesh() !void {
             }
         }
 
-        const number_tris = mesh.indexes.items.len / 3;
-
-        if (number_tris != last_number_tris) {
-            std.debug.print("Terrain {} tris\n", .{number_tris});
-            last_number_tris = number_tris;
-        }
-
         if (mesh.vbo_memory) |vbo| {
-            // std.debug.print("Memcpy {} {*}\n", .{mesh.vbo, vbo});
-            @memcpy (vbo, mesh.vertexes.items);
+            @memcpy(vbo, mesh.vertexes.items);
             mesh.vbo_dirty = false;
         }
 
         if (mesh.ebo_memory) |ebo| {
-            // std.debug.print("Memcpy {} {*}\n", .{mesh.ebo, ebo});
-            @memcpy (ebo, mesh.indexes.items);
+            @memcpy(ebo, mesh.indexes.items);
             mesh.ebo_dirty = false;
         }
 
         state.terrain_generation_requested = false;
         state.terrain_generation_ready = true;
 
-        debug_terrain_status ("Generated");
+        debug_terrain_status("Generated");
     }
 }
 
@@ -849,7 +889,7 @@ fn add_map_vertex(mesh: *TerrainMesh, x: f32, y: f32) !u32 {
     const hmy: i32 = @intFromFloat(y / terrain_cell_size);
     const mx: usize = @max(0, @min(4096, hmx));
     const my: usize = @max(0, @min(4096, hmy));
-    const h = state.height_map[my][mx] + rand(f32) * 10;
+    const h = state.height_map[my][mx];
     if (h == 0) {
         const r = 0;
         const g = 0;
@@ -859,9 +899,9 @@ fn add_map_vertex(mesh: *TerrainMesh, x: f32, y: f32) !u32 {
             .col = .{ .r = r, .g = g, .b = b },
         });
     } else {
-        const r = h / 1000;
+        const r = h / 2000;
         const g = h / 1000;
-        const b = h / 1000;
+        const b = h / 3000;
         return try mesh.addVertex(.{
             .pos = .{ .x = x, .y = y, .z = h },
             .col = .{ .r = r, .g = g, .b = b },
@@ -953,20 +993,6 @@ fn begin_3d() void {
         state.main_camera.target,
         state.main_camera.up,
     );
-    // const view : math.Mat = .{
-    // .{1, 0, 0, 0},
-    // .{0, 1, 0, 0},
-    // .{0, 0, 1, 0},
-    // .{-0.5, -2, 4, 1},
-    // };
-
-    if (false) {
-        std.debug.print("pos  : {d:7.2} {d:7.2} {d:7.2} {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{ state.main_camera.position[0], state.main_camera.position[1], state.main_camera.position[2], state.main_camera.position[3], state.now, @sin(state.now), @cos(state.now) });
-        std.debug.print("view : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{ view[0][0], view[0][1], view[0][2], view[0][3] });
-        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{ view[1][0], view[1][1], view[1][2], view[1][3] });
-        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{ view[2][0], view[2][1], view[2][2], view[2][3] });
-        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{ view[3][0], view[3][1], view[3][2], view[3][3] });
-    }
 
     const width: f32 = @floatFromInt(state.width);
     const height: f32 = @floatFromInt(state.height);
@@ -974,22 +1000,9 @@ fn begin_3d() void {
     const aspect = width / height;
 
     const near: f32 = 1;
-    const far: f32 = 80000;
+    const far: f32 = 30000;
 
     const projection = math.perspectiveFovLhGl(std.math.pi / 3.0, aspect, near, far);
-
-    if (false) {
-        std.debug.print("proj : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{ projection[0][0], projection[0][1], projection[0][2], projection[0][3] });
-        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{ projection[1][0], projection[1][1], projection[1][2], projection[1][3] });
-        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{ projection[2][0], projection[2][1], projection[2][2], projection[2][3] });
-        std.debug.print("     : {d:7.2} {d:7.2} {d:7.2} {d:7.2}\n", .{ projection[3][0], projection[3][1], projection[3][2], projection[3][3] });
-    }
-
-    // const camera_pos: [3]f32 = .{
-    // state.main_camera.position[0],
-    // state.main_camera.position[1],
-    // state.main_camera.position[2],
-    // };
 
     state.basic_shader.use();
     // state.basic_shader.setUniform3f("camera_pos", camera_pos);
@@ -1033,12 +1046,12 @@ fn draw_terrain() void {
         return;
     }
 
-    debug_terrain_status ("draw");
+    debug_terrain_status("draw");
 
     if (state.terrain_generation_ready) {
         const copy_index = state.terrain_frame_index +% 1;
 
-        debug_terrain_status ("copying");
+        debug_terrain_status("copying");
 
         if (state.terrain_mesh[copy_index]) |*mesh| {
             mesh.unmap_memory();
@@ -1053,7 +1066,7 @@ fn draw_terrain() void {
         state.terrain_generation_ready = false;
         state.terrain_frame_index +%= 1;
         request_terrain_generation();
-        debug_terrain_status ("copied");
+        debug_terrain_status("copied");
     }
 
     state.terrain_shader.use();
@@ -1065,7 +1078,7 @@ fn draw_terrain() void {
     // var number_mesh_loaded : usize = 0;
 
     if (state.show_wireframe) {
-        debug_terrain_status ("wireframe");
+        debug_terrain_status("wireframe");
         if (state.terrain_mesh[state.terrain_frame_index]) |*grid| {
             gl.polygonMode(gl.FRONT_AND_BACK, gl.LINE);
             grid.render();
@@ -1091,11 +1104,9 @@ fn draw_terrain() void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn debug_terrain_status (label: []const u8) void
-{
-    if (false)
-    {
-        std.debug.print ("{s: <12} : ready {} : requested {} : frame {} : {?*} {?*}\n", .{
+fn debug_terrain_status(label: []const u8) void {
+    if (false) {
+        std.debug.print("{s: <12} : ready {} : requested {} : frame {} : {?*} {?*}\n", .{
             label,
             state.terrain_generation_ready,
             state.terrain_generation_requested,
