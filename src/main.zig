@@ -77,7 +77,6 @@ pub const State = struct {
 
     height_map: [max_map_y / terrain_cell_size + 1][max_map_x / terrain_cell_size + 1]f32 = undefined,
 
-    terrain_lod: usize = 4,
 
     terrain_generation_requested: bool = false,
     terrain_generation_ready: bool = false,
@@ -391,23 +390,23 @@ fn update_camera() void {
 
     if (!state.gui_capture_keyboard) {
         if (state.main_window.getKey(.w) == .press) {
-            state.target_x -= fast_multiplier * sy * 100 * state.delta_time;
-            state.target_y -= fast_multiplier * cy * 100 * state.delta_time;
+            state.target_x -= fast_multiplier * sy * 128 * state.delta_time;
+            state.target_y -= fast_multiplier * cy * 128 * state.delta_time;
         }
 
         if (state.main_window.getKey(.s) == .press) {
-            state.target_x += fast_multiplier * sy * 100 * state.delta_time;
-            state.target_y += fast_multiplier * cy * 100 * state.delta_time;
+            state.target_x += fast_multiplier * sy * 128 * state.delta_time;
+            state.target_y += fast_multiplier * cy * 128 * state.delta_time;
         }
 
         if (state.main_window.getKey(.a) == .press) {
-            state.target_x -= fast_multiplier * cy * 100 * state.delta_time;
-            state.target_y += fast_multiplier * sy * 100 * state.delta_time;
+            state.target_x -= fast_multiplier * cy * 128 * state.delta_time;
+            state.target_y += fast_multiplier * sy * 128 * state.delta_time;
         }
 
         if (state.main_window.getKey(.d) == .press) {
-            state.target_x += fast_multiplier * cy * 100 * state.delta_time;
-            state.target_y -= fast_multiplier * sy * 100 * state.delta_time;
+            state.target_x += fast_multiplier * cy * 128 * state.delta_time;
+            state.target_y -= fast_multiplier * sy * 128 * state.delta_time;
         }
     }
 
@@ -618,20 +617,6 @@ fn on_key(
         state.show_wireframe = !state.show_wireframe;
     } else if (key == .F6 and action == .press and mod == 0) {
         state.show_grid = !state.show_grid;
-    } else if (key == .one and action == .press and mod == 0) {
-        state.terrain_lod = 0;
-    } else if (key == .two and action == .press and mod == 0) {
-        state.terrain_lod = 1;
-    } else if (key == .three and action == .press and mod == 0) {
-        state.terrain_lod = 2;
-    } else if (key == .four and action == .press and mod == 0) {
-        state.terrain_lod = 3;
-    } else if (key == .five and action == .press and mod == 0) {
-        state.terrain_lod = 4;
-    } else if (key == .six and action == .press and mod == 0) {
-        state.terrain_lod = 5;
-    } else if (key == .seven and action == .press and mod == 0) {
-        state.terrain_lod = 6;
     }
 }
 
@@ -788,8 +773,6 @@ fn create_terrain() !void {
         state.terrain_mesh[index] = mesh;
     }
 
-    debug_terrain_status("create");
-
     request_terrain_generation();
 }
 
@@ -832,10 +815,8 @@ fn create_terrain_mesh() !void {
 
     const index = state.terrain_frame_index +% 1;
 
-    debug_terrain_status("Generating");
-
     if (state.terrain_mesh[index]) |*mesh| {
-        const grid_size: f32 = @floatFromInt(@as(u32, 16) << @intCast(state.terrain_lod));
+        const grid_size: f32 = 1024;
 
         var x: f32 = 0;
         while (x < 64 * 1024) : (x += grid_size) {
@@ -855,10 +836,10 @@ fn create_terrain_mesh() !void {
             mesh.ebo_dirty = false;
         }
 
+        std.debug.print ("{}\n", .{mesh.indexes.items.len / 3});
+
         state.terrain_generation_requested = false;
         state.terrain_generation_ready = true;
-
-        debug_terrain_status("Generated");
     }
 }
 
@@ -872,19 +853,26 @@ fn create_mesh_quad(mesh: *TerrainMesh, x: f32, y: f32, s: f32) !void {
     const v3 = try add_map_vertex(mesh, x, y + s);
     const v4 = try add_map_vertex(mesh, x + s, y + s);
 
-    try mesh.addIndex(v1);
-    try mesh.addIndex(v2);
-    try mesh.addIndex(v3);
-    try mesh.addIndex(v2);
-    try mesh.addIndex(v4);
-    try mesh.addIndex(v3);
+    // TODO: hinge the quad in a 'reasonable' way
+
+    try mesh.addIndex(v1.id);
+    try mesh.addIndex(v2.id);
+    try mesh.addIndex(v3.id);
+    try mesh.addIndex(v2.id);
+    try mesh.addIndex(v4.id);
+    try mesh.addIndex(v3.id);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn add_map_vertex(mesh: *TerrainMesh, x: f32, y: f32) !u32 {
+const AddVertex = struct {
+    id : u32,
+    h: f32,
+};
+
+fn add_map_vertex(mesh: *TerrainMesh, x: f32, y: f32) !AddVertex {
     const hmx: i32 = @intFromFloat(x / terrain_cell_size);
     const hmy: i32 = @intFromFloat(y / terrain_cell_size);
     const mx: usize = @max(0, @min(4096, hmx));
@@ -894,18 +882,18 @@ fn add_map_vertex(mesh: *TerrainMesh, x: f32, y: f32) !u32 {
         const r = 0;
         const g = 0;
         const b = 1;
-        return try mesh.addVertex(.{
+        return .{ .id = try mesh.addVertex(.{
             .pos = .{ .x = x, .y = y, .z = h },
             .col = .{ .r = r, .g = g, .b = b },
-        });
+        }), .h = h};
     } else {
         const r = h / 2000;
         const g = h / 1000;
         const b = h / 3000;
-        return try mesh.addVertex(.{
+        return .{ .id = try mesh.addVertex(.{
             .pos = .{ .x = x, .y = y, .z = h },
             .col = .{ .r = r, .g = g, .b = b },
-        });
+        }), .h = h};
     }
 }
 
@@ -1052,12 +1040,8 @@ fn draw_terrain() void {
         return;
     }
 
-    debug_terrain_status("draw");
-
     if (state.terrain_generation_ready) {
         const copy_index = state.terrain_frame_index +% 1;
-
-        debug_terrain_status("copying");
 
         if (state.terrain_mesh[copy_index]) |*mesh| {
             mesh.unmap_memory();
@@ -1072,7 +1056,6 @@ fn draw_terrain() void {
         state.terrain_generation_ready = false;
         state.terrain_frame_index +%= 1;
         request_terrain_generation();
-        debug_terrain_status("copied");
     }
 
     state.terrain_shader.use();
@@ -1084,7 +1067,6 @@ fn draw_terrain() void {
     // var number_mesh_loaded : usize = 0;
 
     if (state.show_wireframe) {
-        debug_terrain_status("wireframe");
         if (state.terrain_mesh[state.terrain_frame_index]) |*grid| {
             gl.polygonMode(gl.FRONT_AND_BACK, gl.LINE);
             grid.render();
@@ -1104,23 +1086,6 @@ fn draw_terrain() void {
 
     gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
     gl.enable(gl.CULL_FACE);
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-fn debug_terrain_status(label: []const u8) void {
-    if (false) {
-        std.debug.print("{s: <12} : ready {} : requested {} : frame {} : {?*} {?*}\n", .{
-            label,
-            state.terrain_generation_ready,
-            state.terrain_generation_requested,
-            state.terrain_frame_index,
-            state.terrain_mesh[0].?.vbo_memory,
-            state.terrain_mesh[1].?.vbo_memory,
-        });
-    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
