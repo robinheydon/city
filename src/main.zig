@@ -81,11 +81,10 @@ pub const State = struct {
     terrain_generation_requested: bool = false,
     terrain_generation_ready: bool = false,
 
-    target_terrain_tris: f32 = 100_000,
+    target_terrain_tris: f32 = 50_000,
     terrain_detail: f32 = 8,
     terrain_frame_index: u1 = 0,
     terrain_mesh: [2]?TerrainMesh = .{ null, null },
-    terrain_lines: [2]?TerrainMesh = .{ null, null },
 
     axes: Mesh = undefined,
 
@@ -148,7 +147,7 @@ pub fn main() !void {
     glfw.windowHintTyped(.doublebuffer, true);
     glfw.windowHintTyped(.samples, 8);
 
-    state.main_window = try glfw.Window.create(1920, 1080, "City", null);
+    state.main_window = try glfw.Window.create(1280, 720, "City", null);
     defer state.main_window.destroy();
 
     glfw.makeContextCurrent(state.main_window);
@@ -158,7 +157,7 @@ pub fn main() !void {
     gl.debugMessageCallback(opengl_debug_message, null);
     gl.enable(gl.DEBUG_OUTPUT);
 
-    glfw.swapInterval(0);
+    glfw.swapInterval(1);
 
     gl.clearColor(0.4, 0.4, 0.4, 1.0);
     gl.clearDepth(1.0);
@@ -533,12 +532,9 @@ fn draw_fps() void {
             gui.text("camera_yaw: {d:0.3}", .{state.camera_yaw});
             gui.text("camera_pitch: {d:0.3}", .{state.camera_pitch});
             gui.text("camera_zoom: {d:0.3}", .{state.camera_zoom});
-            gui.text("camera_x: {d:0.3}", .{state.main_camera.position[0]});
-            gui.text("camera_y: {d:0.3}", .{state.main_camera.position[1]});
-            gui.text("camera_z: {d:0.3}", .{state.main_camera.position[2]});
-            gui.text("target_x: {d:0.3}", .{state.main_camera.target[0]});
-            gui.text("target_y: {d:0.3}", .{state.main_camera.target[1]});
-            gui.text("target_z: {d:0.3}", .{state.main_camera.target[2]});
+            if (state.terrain_mesh[state.terrain_frame_index]) |mesh| {
+                gui.text("terrain_tris: {d}", .{mesh.indexes.items.len/3});
+            }
         }
         gui.end();
     }
@@ -809,12 +805,47 @@ fn request_terrain_generation() void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn create_terrain_mesh_thread() void {
+    var last_terrain_detail: f32 = 0;
+    var last_camera_position_x: f32 = 0;
+    var last_camera_position_y: f32 = 0;
+    var last_camera_target_x: f32 = 0;
+    var last_camera_target_y: f32 = 0;
     while (state.running) {
         if (state.terrain_generation_requested) {
-            create_terrain_mesh() catch {};
+            var dirty = false;
+            if (last_terrain_detail != state.terrain_detail)
+            {
+                last_terrain_detail = state.terrain_detail;
+                dirty = true;
+            }
+            if (last_camera_position_x != state.main_camera.position[0])
+            {
+                last_camera_position_x = state.main_camera.position[0];
+                dirty = true;
+            }
+            if (last_camera_position_y != state.main_camera.position[1])
+            {
+                last_camera_position_y = state.main_camera.position[1];
+                dirty = true;
+            }
+            if (last_camera_target_x != state.main_camera.target[0])
+            {
+                last_camera_target_x = state.main_camera.target[0];
+                dirty = true;
+            }
+            if (last_camera_target_y != state.main_camera.target[1])
+            {
+                last_camera_target_y = state.main_camera.target[1];
+                dirty = true;
+            }
+
+            if (dirty)
+            {
+                create_terrain_mesh() catch {};
+            }
         }
 
-        std.time.sleep(20 * std.time.ns_per_ms);
+        std.time.sleep(50 * std.time.ns_per_ms);
     }
 }
 
@@ -985,9 +1016,6 @@ fn delete_terrain() void {
         if (state.terrain_mesh[index]) |*grid| {
             grid.deinit();
         }
-        if (state.terrain_lines[index]) |*grid| {
-            grid.deinit();
-        }
     }
 }
 
@@ -1127,11 +1155,6 @@ fn draw_terrain() void {
             mesh.copy_data();
         }
 
-        if (state.terrain_lines[copy_index]) |*mesh| {
-            mesh.unmap_memory();
-            mesh.copy_data();
-        }
-
         state.terrain_generation_ready = false;
         state.terrain_frame_index +%= 1;
         request_terrain_generation();
@@ -1145,21 +1168,13 @@ fn draw_terrain() void {
 
     // var number_mesh_loaded : usize = 0;
 
-    if (state.show_wireframe) {
-        if (state.terrain_mesh[state.terrain_frame_index]) |*grid| {
+    if (state.terrain_mesh[state.terrain_frame_index]) |*grid| {
+        if (state.show_wireframe) {
             gl.polygonMode(gl.FRONT_AND_BACK, gl.LINE);
             grid.render();
-        }
-    } else {
-        if (state.terrain_mesh[state.terrain_frame_index]) |*grid| {
+        } else {
             gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
             grid.render();
-        }
-        if (state.show_grid) {
-            if (state.terrain_lines[state.terrain_frame_index]) |*grid| {
-                gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
-                grid.render();
-            }
         }
     }
 
