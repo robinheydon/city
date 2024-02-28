@@ -63,6 +63,11 @@ pub const State = struct {
     now: f64 = 0,
     delta_time: f32 = 0,
 
+    target_velocity: f32 = 0,
+    yaw_velocity: f32 = 0,
+    pitch_velocity: f32 = 0,
+    zoom_velocity: f32 = 0,
+
     target_x: f32 = default_map_x,
     target_y: f32 = default_map_y,
     camera_yaw: f32 = default_camera_yaw,
@@ -177,6 +182,12 @@ pub fn main() !void {
     _ = gui.io.addFontFromMemory(fonts.atkinson_regular, 24);
 
     gui.getStyle().scaleAllSizes(2);
+
+    state.target_x = default_map_x;
+    state.target_y = default_map_y;
+    state.camera_yaw = default_camera_yaw;
+    state.camera_pitch = default_camera_pitch;
+    state.camera_zoom = default_camera_zoom;
 
     try create_shaders();
 
@@ -336,7 +347,15 @@ fn update_delta_time() void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn update_camera() void {
-    const fast_multiplier: f32 = if (state.main_window.getKey(.left_shift) == .press) 4 else if (state.main_window.getKey (.left_control) == .press) 0.1 else 1;
+    const fast_multiplier: f32 = blk: {
+        if (state.main_window.getKey(.left_shift) == .press) {
+            break :blk 5;
+        } else if (state.main_window.getKey (.left_control) == .press) {
+            break :blk 0.2;
+        } else {
+            break :blk 1;
+        }
+    };
 
     if (!state.gui_capture_keyboard) {
         if (state.main_window.getKey(.t) == .press) {
@@ -346,9 +365,14 @@ fn update_camera() void {
             state.camera_pitch = default_camera_pitch;
             state.camera_zoom = default_camera_zoom;
         }
+    }
+
+    if (!state.gui_capture_keyboard) {
+        var moving = false;
 
         if (state.main_window.getKey(.q) == .press) {
-            state.camera_yaw += 45 * fast_multiplier * state.delta_time;
+            state.camera_yaw += state.yaw_velocity * fast_multiplier * state.delta_time;
+            moving = true;
 
             if (state.camera_yaw >= 360) {
                 state.camera_yaw -= 360;
@@ -356,27 +380,66 @@ fn update_camera() void {
         }
 
         if (state.main_window.getKey(.e) == .press) {
-            state.camera_yaw -= 45 * fast_multiplier * state.delta_time;
+            state.camera_yaw -= state.yaw_velocity * fast_multiplier * state.delta_time;
+            moving = true;
 
             if (state.camera_yaw < 0) {
                 state.camera_yaw += 360;
             }
         }
 
+        if (moving)
+        {
+            state.yaw_velocity = @min (90, state.yaw_velocity + 30 * state.delta_time);
+        }
+        else
+        {
+            state.yaw_velocity = 0;
+        }
+    }
+
+    if (!state.gui_capture_keyboard) {
+        var moving = false;
+
         if (state.main_window.getKey(.f) == .press) {
-            state.camera_pitch = @max(5, state.camera_pitch - fast_multiplier * 16 * state.delta_time);
+            state.camera_pitch = @max(15, state.camera_pitch - fast_multiplier * state.pitch_velocity * state.delta_time);
+            moving = true;
         }
 
         if (state.main_window.getKey(.r) == .press) {
-            state.camera_pitch = @min(85, state.camera_pitch + fast_multiplier * 16 * state.delta_time);
+            state.camera_pitch = @min(75, state.camera_pitch + fast_multiplier * state.pitch_velocity * state.delta_time);
+            moving = true;
         }
 
+        if (moving)
+        {
+            state.pitch_velocity = @min (30, state.pitch_velocity + 10 * state.delta_time);
+        }
+        else
+        {
+            state.pitch_velocity = 0;
+        }
+    }
+
+    if (!state.gui_capture_keyboard) {
+        var moving = false;
         if (state.main_window.getKey(.z) == .press) {
-            state.camera_zoom = @max(15, state.camera_zoom - fast_multiplier * 128 * state.delta_time);
+            state.camera_zoom = @max(15, state.camera_zoom - fast_multiplier * state.zoom_velocity * state.delta_time);
+            moving = true;
         }
 
         if (state.main_window.getKey(.x) == .press) {
-            state.camera_zoom = @min(2000, state.camera_zoom + fast_multiplier * 128 * state.delta_time);
+            state.camera_zoom = @min(2000, state.camera_zoom + fast_multiplier * state.zoom_velocity * state.delta_time);
+            moving = true;
+        }
+
+        if (moving)
+        {
+            state.zoom_velocity = @min (500, state.zoom_velocity + 100 * state.delta_time);
+        }
+        else
+        {
+            state.zoom_velocity = 0;
         }
     }
 
@@ -390,24 +453,37 @@ fn update_camera() void {
     const cp: f32 = @floatCast(@cos(pitch));
 
     if (!state.gui_capture_keyboard) {
+        var moving = false;
         if (state.main_window.getKey(.w) == .press) {
-            state.target_x -= fast_multiplier * sy * 512 * state.delta_time;
-            state.target_y -= fast_multiplier * cy * 512 * state.delta_time;
+            state.target_x -= fast_multiplier * sy * state.target_velocity * state.delta_time;
+            state.target_y -= fast_multiplier * cy * state.target_velocity * state.delta_time;
+            moving = true;
         }
-
         if (state.main_window.getKey(.s) == .press) {
-            state.target_x += fast_multiplier * sy * 512 * state.delta_time;
-            state.target_y += fast_multiplier * cy * 512 * state.delta_time;
+            state.target_x += fast_multiplier * sy * state.target_velocity * state.delta_time;
+            state.target_y += fast_multiplier * cy * state.target_velocity * state.delta_time;
+            moving = true;
         }
 
         if (state.main_window.getKey(.a) == .press) {
-            state.target_x -= fast_multiplier * cy * 512 * state.delta_time;
-            state.target_y += fast_multiplier * sy * 512 * state.delta_time;
+            state.target_x -= fast_multiplier * cy * state.target_velocity * state.delta_time;
+            state.target_y += fast_multiplier * sy * state.target_velocity * state.delta_time;
+            moving = true;
         }
 
         if (state.main_window.getKey(.d) == .press) {
-            state.target_x += fast_multiplier * cy * 512 * state.delta_time;
-            state.target_y -= fast_multiplier * sy * 512 * state.delta_time;
+            state.target_x += fast_multiplier * cy * state.target_velocity * state.delta_time;
+            state.target_y -= fast_multiplier * sy * state.target_velocity * state.delta_time;
+            moving = true;
+        }
+
+        if (moving)
+        {
+            state.target_velocity = @min (1000, state.target_velocity + 200 * state.delta_time);
+        }
+        else
+        {
+            state.target_velocity = 0;
         }
     }
 
@@ -425,17 +501,14 @@ fn update_camera() void {
     const ch = get_worst_elevation(px, py);
 
     if (pz < ch + 4) {
-        const new_position = math.f32x4 (px, py, ch + 4, 1);
-        state.main_camera.position = math.lerp (state.main_camera.position, new_position, state.delta_time);
+        state.main_camera.position = math.f32x4 (px, py, ch + 4, 1);
     }
     else
     {
-        const new_position = math.f32x4 (px, py, pz, 1);
-        state.main_camera.position = math.lerp (state.main_camera.position, new_position, state.delta_time);
+        state.main_camera.position = math.f32x4 (px, py, pz, 1);
     }
 
-    const new_target = math.f32x4 (state.target_x, state.target_y, target_z, 1);
-    state.main_camera.target = math.lerp (state.main_camera.target, new_target, state.delta_time);
+    state.main_camera.target = math.f32x4 (state.target_x, state.target_y, target_z, 1);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -524,14 +597,9 @@ fn draw_fps() void {
                 .no_nav_focus = true,
             },
         })) {
-            gui.text("fps: {d:0.0}", .{state.fps});
-            gui.text("target_x: {d:0.3}", .{state.target_x});
-            gui.text("target_y: {d:0.3}", .{state.target_y});
-            gui.text("camera_yaw: {d:0.3}", .{state.camera_yaw});
-            gui.text("camera_pitch: {d:0.3}", .{state.camera_pitch});
-            gui.text("camera_zoom: {d:0.3}", .{state.camera_zoom});
+            gui.text("fps: {d:0.0} / {d:0.1} ms", .{state.fps, state.delta_time * 1000});
             if (state.terrain_mesh[state.terrain_frame_index]) |mesh| {
-                gui.text("terrain_tris: {d}", .{mesh.indexes.items.len/3});
+                gui.text("terrain: {d} tris", .{mesh.indexes.items.len/3});
             }
         }
         gui.end();
