@@ -33,8 +33,8 @@ const max_map_y = 64 * 1024;
 const default_map_x = 32 * 1024;
 const default_map_y = 32 * 1024;
 const default_camera_yaw = 0;
-const default_camera_pitch = 45;
-const default_camera_zoom = 400;
+const default_camera_pitch = 30;
+const default_camera_zoom = 1000;
 
 const terrain_cell_size = 16;
 
@@ -48,7 +48,7 @@ pub const State = struct {
     show_fps: bool = true,
     show_terrain: bool = true,
     show_axes: bool = false,
-    show_wireframe: bool = false,
+    show_wireframe: bool = true,
     show_grid: bool = false,
 
     gui_capture_mouse: bool = false,
@@ -76,11 +76,13 @@ pub const State = struct {
     height: i32 = undefined,
 
     height_map: [max_map_y / terrain_cell_size + 1][max_map_x / terrain_cell_size + 1]f32 = undefined,
-
+    flat_map: [max_map_y / terrain_cell_size + 1][max_map_x / terrain_cell_size + 1]u8 = undefined,
 
     terrain_generation_requested: bool = false,
     terrain_generation_ready: bool = false,
 
+    target_terrain_tris: f32 = 100_000,
+    terrain_detail: f32 = 8,
     terrain_frame_index: u1 = 0,
     terrain_mesh: [2]?TerrainMesh = .{ null, null },
     terrain_lines: [2]?TerrainMesh = .{ null, null },
@@ -390,23 +392,23 @@ fn update_camera() void {
 
     if (!state.gui_capture_keyboard) {
         if (state.main_window.getKey(.w) == .press) {
-            state.target_x -= fast_multiplier * sy * 128 * state.delta_time;
-            state.target_y -= fast_multiplier * cy * 128 * state.delta_time;
+            state.target_x -= fast_multiplier * sy * 512 * state.delta_time;
+            state.target_y -= fast_multiplier * cy * 512 * state.delta_time;
         }
 
         if (state.main_window.getKey(.s) == .press) {
-            state.target_x += fast_multiplier * sy * 128 * state.delta_time;
-            state.target_y += fast_multiplier * cy * 128 * state.delta_time;
+            state.target_x += fast_multiplier * sy * 512 * state.delta_time;
+            state.target_y += fast_multiplier * cy * 512 * state.delta_time;
         }
 
         if (state.main_window.getKey(.a) == .press) {
-            state.target_x -= fast_multiplier * cy * 128 * state.delta_time;
-            state.target_y += fast_multiplier * sy * 128 * state.delta_time;
+            state.target_x -= fast_multiplier * cy * 512 * state.delta_time;
+            state.target_y += fast_multiplier * sy * 512 * state.delta_time;
         }
 
         if (state.main_window.getKey(.d) == .press) {
-            state.target_x += fast_multiplier * cy * 128 * state.delta_time;
-            state.target_y -= fast_multiplier * sy * 128 * state.delta_time;
+            state.target_x += fast_multiplier * cy * 512 * state.delta_time;
+            state.target_y -= fast_multiplier * sy * 512 * state.delta_time;
         }
     }
 
@@ -741,6 +743,19 @@ fn create_shaders() !void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
+fn get_point_elevation(x:f32, y:f32) f32 {
+    const hmx: i32 = @intFromFloat(x / terrain_cell_size);
+    const hmy: i32 = @intFromFloat(y / terrain_cell_size);
+    const mx: usize = @max(0, @min(4096, hmx));
+    const my: usize = @max(0, @min(4096, hmy));
+
+    return state.height_map[my][mx];
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
 fn get_worst_elevation(x: f32, y: f32) f32 {
     const hmx: i32 = @intFromFloat(x / terrain_cell_size);
     const hmy: i32 = @intFromFloat(y / terrain_cell_size);
@@ -795,7 +810,9 @@ fn request_terrain_generation() void {
 
 fn create_terrain_mesh_thread() void {
     while (state.running) {
-        create_terrain_mesh() catch {};
+        if (state.terrain_generation_requested) {
+            create_terrain_mesh() catch {};
+        }
 
         std.time.sleep(20 * std.time.ns_per_ms);
     }
@@ -809,20 +826,16 @@ fn create_terrain_mesh() !void {
     const zone = tracy.ZoneNC(@src(), "create_terrain_mesh", 0x00_ff_00_00);
     defer zone.End();
 
-    if (!state.terrain_generation_requested) {
-        return;
-    }
-
     const index = state.terrain_frame_index +% 1;
 
     if (state.terrain_mesh[index]) |*mesh| {
-        const grid_size: f32 = 1024;
+        const grid_size: f32 = 4096;
 
         var x: f32 = 0;
         while (x < 64 * 1024) : (x += grid_size) {
             var y: f32 = 0;
             while (y < 64 * 1024) : (y += grid_size) {
-                try create_mesh_quad(mesh, x, y, grid_size);
+                _ = try create_terrain_mesh_quad(mesh, x, y, grid_size);
             }
         }
 
@@ -836,7 +849,13 @@ fn create_terrain_mesh() !void {
             mesh.ebo_dirty = false;
         }
 
-        std.debug.print ("{}\n", .{mesh.indexes.items.len / 3});
+        const tris : f32 = @floatFromInt (mesh.indexes.items.len / 3);
+
+        if (tris < state.target_terrain_tris * 0.95 or tris > state.target_terrain_tris * 1.05)
+        {
+            state.terrain_detail -= (tris - state.target_terrain_tris) / state.target_terrain_tris;
+            state.terrain_detail = @max (1, @min (100, state.terrain_detail));
+        }
 
         state.terrain_generation_requested = false;
         state.terrain_generation_ready = true;
@@ -847,53 +866,113 @@ fn create_terrain_mesh() !void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn create_mesh_quad(mesh: *TerrainMesh, x: f32, y: f32, s: f32) !void {
-    const v1 = try add_map_vertex(mesh, x, y);
-    const v2 = try add_map_vertex(mesh, x + s, y);
-    const v3 = try add_map_vertex(mesh, x, y + s);
-    const v4 = try add_map_vertex(mesh, x + s, y + s);
+fn create_terrain_mesh_quad (mesh: *TerrainMesh, x: f32, y: f32, s: f32) !bool {
+    const ax = state.main_camera.position[0];
+    const ay = state.main_camera.position[1];
+    const bx = state.main_camera.target[0];
+    const by = state.main_camera.target[1];
+    const cx = x + s/2;
+    const cy = y + s/2;
 
-    // TODO: hinge the quad in a 'reasonable' way
+    const abx = ax - bx;
+    const aby = ay - by;
 
-    try mesh.addIndex(v1.id);
-    try mesh.addIndex(v2.id);
-    try mesh.addIndex(v3.id);
-    try mesh.addIndex(v2.id);
-    try mesh.addIndex(v4.id);
-    try mesh.addIndex(v3.id);
+    const bcx = bx - cx;
+    const bcy = by - cy;
+
+    const acx = ax - cx;
+    const acy = ay - cy;
+
+    const ab_bc = (abx * bcx + aby * bcy);
+    const ab_ac = (abx * acx + aby * acy);
+
+    var distance: f32 = 0;
+
+    if (ab_bc > 0)
+    {
+        distance = @sqrt ((cx-bx)*(cx-bx) + (cy-by)*(cy-by));
+    }
+    else if (ab_ac < 0)
+    {
+        distance = @sqrt ((cx-ax)*(cx-ax) + (cy-ay)*(cy-ay));
+    }
+    else
+    {
+        const nom = @sqrt (abx * abx + aby * aby);
+        const dem = @abs (abx * acy - aby * acx);
+        distance = dem / nom;
+    }
+
+    if (s > 16 and distance < s * state.terrain_detail)
+    {
+        const sp = mesh.savepoint ();
+        const flat1 = try create_terrain_mesh_quad (mesh, x, y, s/2);
+        const flat2 = try create_terrain_mesh_quad (mesh, x+s/2, y, s/2);
+        const flat3 = try create_terrain_mesh_quad (mesh, x, y+s/2, s/2);
+        const flat4 = try create_terrain_mesh_quad (mesh, x+s/2, y+s/2, s/2);
+
+        if (flat1 and flat2 and flat3 and flat4)
+        {
+            mesh.restore (sp);
+            return try create_mesh_quad (mesh, x, y, s);
+        }
+
+        return false;
+    }
+    else
+    {
+        return try create_mesh_quad (mesh, x, y, s);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-const AddVertex = struct {
-    id : u32,
-    h: f32,
-};
+fn create_mesh_quad(mesh: *TerrainMesh, x: f32, y: f32, s: f32) !bool {
+    const h1 = get_point_elevation (x, y);
+    const h2 = get_point_elevation (x + s, y);
+    const h3 = get_point_elevation (x, y + s);
+    const h4 = get_point_elevation (x + s, y + s);
 
-fn add_map_vertex(mesh: *TerrainMesh, x: f32, y: f32) !AddVertex {
-    const hmx: i32 = @intFromFloat(x / terrain_cell_size);
-    const hmy: i32 = @intFromFloat(y / terrain_cell_size);
-    const mx: usize = @max(0, @min(4096, hmx));
-    const my: usize = @max(0, @min(4096, hmy));
-    const h = state.height_map[my][mx];
-    if (h == 0) {
+    const v1 = try add_map_vertex(mesh, x, y, h1);
+    const v2 = try add_map_vertex(mesh, x + s, y, h2);
+    const v3 = try add_map_vertex(mesh, x, y + s, h3);
+    const v4 = try add_map_vertex(mesh, x + s, y + s, h4);
+
+    // TODO: hinge the quad in a 'reasonable' way
+
+    try mesh.addIndex(v1);
+    try mesh.addIndex(v2);
+    try mesh.addIndex(v3);
+    try mesh.addIndex(v2);
+    try mesh.addIndex(v4);
+    try mesh.addIndex(v3);
+
+    return (h1 == h2 and h2 == h3 and h3 == h4);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+fn add_map_vertex(mesh: *TerrainMesh, x: f32, y: f32, z: f32) !u32 {
+    if (z == 0) {
         const r = 0;
         const g = 0;
         const b = 1;
-        return .{ .id = try mesh.addVertex(.{
-            .pos = .{ .x = x, .y = y, .z = h },
+        return try mesh.addVertex(.{
+            .pos = .{ .x = x, .y = y, .z = z },
             .col = .{ .r = r, .g = g, .b = b },
-        }), .h = h};
+        });
     } else {
-        const r = h / 2000;
-        const g = h / 1000;
-        const b = h / 3000;
-        return .{ .id = try mesh.addVertex(.{
-            .pos = .{ .x = x, .y = y, .z = h },
+        const r = z / 2000;
+        const g = z / 1000;
+        const b = z / 3000;
+        return try mesh.addVertex(.{
+            .pos = .{ .x = x, .y = y, .z = z },
             .col = .{ .r = r, .g = g, .b = b },
-        }), .h = h};
+        });
     }
 }
 

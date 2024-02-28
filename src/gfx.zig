@@ -179,6 +179,20 @@ pub fn Mesh(comptime T: type) type {
             self.ebo_empty = false;
         }
 
+        const SavePoint = struct {
+            vi : usize,
+            ii : usize,
+        };
+
+        pub fn savepoint (self: *Self) SavePoint {
+            return .{ .vi = self.vertexes.items.len, .ii = self.indexes.items.len };
+        }
+
+        pub fn restore (self: *Self, sp: SavePoint) void {
+            self.vertexes.items.len = sp.vi;
+            self.indexes.items.len = sp.ii;
+        }
+
         pub fn addVertex(self: *Self, vertex: T) !u32 {
             const index = self.vertexes.items.len;
             try self.vertexes.append(vertex);
