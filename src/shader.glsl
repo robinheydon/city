@@ -1,5 +1,5 @@
 @vertex
-#version 330 core
+#version 430 core
 
 layout (location = 0) in vec3 pos;
 layout (location = 1) in vec3 color;
@@ -19,17 +19,17 @@ void main ()
 }
 
 @fragment
-#version 330 core
+#version 430 core
 
 out vec4 FragColor;
-uniform vec3 camera_pos;
+uniform vec3 camera;
 
 in vec4 vtx_color;
 in vec3 vtx_pos;
 
 void main ()
 {
-    float dist = distance (camera_pos, vtx_pos);
+    float dist = distance (camera, vtx_pos);
     float opacity = clamp (dist / 16000, 0, 1);
 
     FragColor = mix (vtx_color, vec4 (0.4, 0.4, 0.4, 1), opacity);

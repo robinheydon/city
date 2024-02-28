@@ -331,8 +331,9 @@ pub fn Mesh(comptime T: type) type {
 
 pub const Shader = struct {
     id: gl.Uint,
+    label: []const u8,
 
-    pub fn init(allocator: std.mem.Allocator, source: []const u8) !Shader {
+    pub fn init(allocator: std.mem.Allocator, label: []const u8, source: []const u8) !Shader {
         const zone = tracy.ZoneNC(@src(), "shader.init", 0x00_80_80_80);
         defer zone.End();
 
@@ -406,7 +407,7 @@ pub const Shader = struct {
         }
         gl.deleteShader(vertex_shader);
         gl.deleteShader(fragment_shader);
-        return .{ .id = id };
+        return .{ .label = label, .id = id };
     }
 
     pub fn use(self: Shader) void {
@@ -427,7 +428,7 @@ pub const Shader = struct {
         defer zone.End();
         const location = gl.getUniformLocation(self.id, name);
         if (location == -1) {
-            std.debug.print("Unknown uniform {s}\n", .{name});
+            std.debug.print("Unknown uniform {s} in {s}\n", .{name, self.label});
         }
         gl.uniform3f(location, value[0], value[1], value[2]);
     }
@@ -437,7 +438,7 @@ pub const Shader = struct {
         defer zone.End();
         const location = gl.getUniformLocation(self.id, name);
         if (location == -1) {
-            std.debug.print("Unknown uniform {s}\n", .{name});
+            std.debug.print("Unknown uniform {s} is {s}\n", .{name, self.label});
         }
         gl.uniform4f(location, value[0], value[1], value[2], value[3]);
     }
@@ -447,7 +448,7 @@ pub const Shader = struct {
         defer zone.End();
         const location = gl.getUniformLocation(self.id, name);
         if (location == -1) {
-            std.debug.print("Unknown uniform {s}\n", .{name});
+            std.debug.print("Unknown uniform {s} is {s}\n", .{name, self.label});
         }
         gl.uniformMatrix4fv(location, 1, gl.FALSE, math.arrNPtr(&value));
     }

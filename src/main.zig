@@ -748,8 +748,8 @@ const shader_source = @embedFile("shader.glsl");
 const terrain_source = @embedFile("terrain.glsl");
 
 fn create_shaders() !void {
-    state.basic_shader = try gfx.Shader.init(state.allocator, shader_source);
-    state.terrain_shader = try gfx.Shader.init(state.allocator, terrain_source);
+    state.basic_shader = try gfx.Shader.init(state.allocator, "basic shader", shader_source);
+    state.terrain_shader = try gfx.Shader.init(state.allocator, "terrain_shader", terrain_source);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -1004,15 +1004,21 @@ fn begin_3d() void {
 
     const projection = math.perspectiveFovLhGl(std.math.pi / 3.0, aspect, near, far);
 
+    const camera_position = [3]f32 {
+        state.main_camera.position[0],
+        state.main_camera.position[1],
+        state.main_camera.position[2],
+    };
+
     state.basic_shader.use();
-    // state.basic_shader.setUniform3f("camera_pos", camera_pos);
+    state.basic_shader.setUniform3f("camera", camera_position);
     state.basic_shader.setUniformMat("model", model);
     state.basic_shader.setUniformMat("view", view);
     state.basic_shader.setUniformMat("projection", projection);
     state.basic_shader.end();
 
     state.terrain_shader.use();
-    // state.terrain_shader.setUniform3f("camera_pos", camera_pos);
+    state.terrain_shader.setUniform3f("camera", camera_position);
     state.terrain_shader.setUniformMat("model", model);
     state.terrain_shader.setUniformMat("view", view);
     state.terrain_shader.setUniformMat("projection", projection);
