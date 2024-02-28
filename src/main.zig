@@ -425,19 +425,17 @@ fn update_camera() void {
     const ch = get_worst_elevation(px, py);
 
     if (pz < ch + 4) {
-        state.main_camera.position = .{ px, py, ch + 4, 1 };
+        const new_position = math.f32x4 (px, py, ch + 4, 1);
+        state.main_camera.position = math.lerp (state.main_camera.position, new_position, state.delta_time);
     }
     else
     {
-        state.main_camera.position = .{ px, py, pz, 1 };
+        const new_position = math.f32x4 (px, py, pz, 1);
+        state.main_camera.position = math.lerp (state.main_camera.position, new_position, state.delta_time);
     }
 
-    state.main_camera.target = .{
-        state.target_x,
-        state.target_y,
-        target_z,
-        1,
-    };
+    const new_target = math.f32x4 (state.target_x, state.target_y, target_z, 1);
+    state.main_camera.target = math.lerp (state.main_camera.target, new_target, state.delta_time);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
