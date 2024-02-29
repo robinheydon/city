@@ -38,6 +38,10 @@ const default_camera_zoom = 1000;
 
 const terrain_cell_size = 16;
 
+const max_terrain_tris = 1_000_000;
+const max_terrain_vertex_capacity = 2 * max_terrain_tris; // four points per quad: two per tri
+const max_terrain_index_capacity = 3 * max_terrain_tris; // six indexes per quad: three per tri
+
 pub const State = struct {
     main_window: *glfw.Window = undefined,
     allocator: std.mem.Allocator = undefined,
@@ -86,8 +90,8 @@ pub const State = struct {
     terrain_generation_requested: bool = false,
     terrain_generation_ready: bool = false,
 
-    target_terrain_tris: f32 = 50_000,
-    terrain_detail: f32 = 8,
+    target_terrain_tris: f32 = max_terrain_tris * 0.9,
+    terrain_detail: f32 = 1,
     terrain_frame_index: u1 = 0,
     terrain_mesh: [2]?TerrainMesh = .{ null, null },
 
@@ -203,9 +207,9 @@ pub fn main() !void {
     gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.DEPTH_TEST);
 
-    state.fade_to_color[0] = 0.4;
-    state.fade_to_color[1] = 0.4;
-    state.fade_to_color[2] = 0.4;
+    state.fade_to_color[0] = 0.35;
+    state.fade_to_color[1] = 0.35;
+    state.fade_to_color[2] = 0.35;
 
     var terrain_thread = try std.Thread.spawn(.{}, create_terrain_mesh_thread, .{});
     try terrain_thread.setName("terrain_mesh");
@@ -350,7 +354,7 @@ fn update_camera() void {
     const fast_multiplier: f32 = blk: {
         if (state.main_window.getKey(.left_shift) == .press) {
             break :blk 5;
-        } else if (state.main_window.getKey (.left_control) == .press) {
+        } else if (state.main_window.getKey(.left_control) == .press) {
             break :blk 0.2;
         } else {
             break :blk 1;
@@ -388,12 +392,9 @@ fn update_camera() void {
             }
         }
 
-        if (moving)
-        {
-            state.yaw_velocity = @min (90, state.yaw_velocity + 30 * state.delta_time);
-        }
-        else
-        {
+        if (moving) {
+            state.yaw_velocity = @min(90, state.yaw_velocity + 30 * state.delta_time);
+        } else {
             state.yaw_velocity = 0;
         }
     }
@@ -411,12 +412,9 @@ fn update_camera() void {
             moving = true;
         }
 
-        if (moving)
-        {
-            state.pitch_velocity = @min (30, state.pitch_velocity + 10 * state.delta_time);
-        }
-        else
-        {
+        if (moving) {
+            state.pitch_velocity = @min(30, state.pitch_velocity + 10 * state.delta_time);
+        } else {
             state.pitch_velocity = 0;
         }
     }
@@ -433,12 +431,9 @@ fn update_camera() void {
             moving = true;
         }
 
-        if (moving)
-        {
-            state.zoom_velocity = @min (500, state.zoom_velocity + 100 * state.delta_time);
-        }
-        else
-        {
+        if (moving) {
+            state.zoom_velocity = @min(500, state.zoom_velocity + 100 * state.delta_time);
+        } else {
             state.zoom_velocity = 0;
         }
     }
@@ -477,18 +472,15 @@ fn update_camera() void {
             moving = true;
         }
 
-        if (moving)
-        {
-            state.target_velocity = @min (1000, state.target_velocity + 200 * state.delta_time);
-        }
-        else
-        {
+        if (moving) {
+            state.target_velocity = @min(1000, state.target_velocity + 200 * state.delta_time);
+        } else {
             state.target_velocity = 0;
         }
     }
 
-    state.target_x = @min (max_map_x, @max (0, state.target_x));
-    state.target_y = @min (max_map_y, @max (0, state.target_y));
+    state.target_x = @min(max_map_x, @max(0, state.target_x));
+    state.target_y = @min(max_map_y, @max(0, state.target_y));
 
     const target_z = get_worst_elevation(state.target_x, state.target_y) + 4;
 
@@ -501,14 +493,12 @@ fn update_camera() void {
     const ch = get_worst_elevation(px, py);
 
     if (pz < ch + 4) {
-        state.main_camera.position = math.f32x4 (px, py, ch + 4, 1);
-    }
-    else
-    {
-        state.main_camera.position = math.f32x4 (px, py, pz, 1);
+        state.main_camera.position = math.f32x4(px, py, ch + 4, 1);
+    } else {
+        state.main_camera.position = math.f32x4(px, py, pz, 1);
     }
 
-    state.main_camera.target = math.f32x4 (state.target_x, state.target_y, target_z, 1);
+    state.main_camera.target = math.f32x4(state.target_x, state.target_y, target_z, 1);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -597,9 +587,9 @@ fn draw_fps() void {
                 .no_nav_focus = true,
             },
         })) {
-            gui.text("fps: {d:0.0} / {d:0.1} ms", .{state.fps, state.delta_time * 1000});
+            gui.text("fps: {d:0.0} / {d:0.1} ms", .{ state.fps, state.delta_time * 1000 });
             if (state.terrain_mesh[state.terrain_frame_index]) |mesh| {
-                gui.text("terrain: {d} tris", .{mesh.indexes.items.len/3});
+                gui.text("terrain: {d} tris {d:0.1}", .{ mesh.indexes.items.len / 3, state.terrain_detail });
             }
         }
         gui.end();
@@ -756,6 +746,7 @@ const TracyAllocator = struct {
         if (result != null) {
             tracy.Alloc(result.?, len);
         }
+        // std.debug.print("Alloc {} : {*}\n", .{ len, result });
         return result;
     }
 
@@ -770,6 +761,7 @@ const TracyAllocator = struct {
         if (self.child_allocator.rawResize(buf, log2_buf_align, new_len, ra)) {
             tracy.Free(buf.ptr);
             tracy.Alloc(buf.ptr, new_len);
+            // std.debug.print("Resize {} : {*} -> {} : {*}\n", .{ buf.len, buf.ptr, new_len, buf.ptr });
             return true;
         }
 
@@ -785,6 +777,7 @@ const TracyAllocator = struct {
     ) void {
         const self: *TracyAllocator = @ptrCast(@alignCast(ctx));
         self.child_allocator.rawFree(buf, log2_buf_align, ra);
+        // std.debug.print("Free {} : {*}\n", .{ buf.len, buf.ptr });
         tracy.Free(buf.ptr);
     }
 };
@@ -805,7 +798,7 @@ fn create_shaders() !void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn get_point_elevation(x:f32, y:f32) f32 {
+fn get_point_elevation(x: f32, y: f32) f32 {
     const hmx: i32 = @intFromFloat(x / terrain_cell_size);
     const hmy: i32 = @intFromFloat(y / terrain_cell_size);
     const mx: usize = @max(0, @min(4096, hmx));
@@ -845,7 +838,7 @@ fn create_terrain() !void {
             .triangles,
         );
 
-        try mesh.setCapacity(4 * 1024 * 1024);
+        try mesh.set_capacity(max_terrain_vertex_capacity, max_terrain_index_capacity);
 
         state.terrain_mesh[index] = mesh;
     }
@@ -879,34 +872,28 @@ fn create_terrain_mesh_thread() void {
     while (state.running) {
         if (state.terrain_generation_requested) {
             var dirty = false;
-            if (last_terrain_detail != state.terrain_detail)
-            {
+            if (last_terrain_detail != state.terrain_detail) {
                 last_terrain_detail = state.terrain_detail;
                 dirty = true;
             }
-            if (last_camera_position_x != state.main_camera.position[0])
-            {
+            if (last_camera_position_x != state.main_camera.position[0]) {
                 last_camera_position_x = state.main_camera.position[0];
                 dirty = true;
             }
-            if (last_camera_position_y != state.main_camera.position[1])
-            {
+            if (last_camera_position_y != state.main_camera.position[1]) {
                 last_camera_position_y = state.main_camera.position[1];
                 dirty = true;
             }
-            if (last_camera_target_x != state.main_camera.target[0])
-            {
+            if (last_camera_target_x != state.main_camera.target[0]) {
                 last_camera_target_x = state.main_camera.target[0];
                 dirty = true;
             }
-            if (last_camera_target_y != state.main_camera.target[1])
-            {
+            if (last_camera_target_y != state.main_camera.target[1]) {
                 last_camera_target_y = state.main_camera.target[1];
                 dirty = true;
             }
 
-            if (dirty)
-            {
+            if (dirty) {
                 create_terrain_mesh() catch {};
             }
         }
@@ -936,26 +923,53 @@ fn create_terrain_mesh() !void {
             }
         }
 
+        const tris: f32 = @floatFromInt(mesh.indexes.items.len / 3);
+
+        const ratio = tris / state.target_terrain_tris;
+
         if (mesh.vbo_memory) |vbo| {
-            @memcpy(vbo, mesh.vertexes.items);
+            std.debug.print("{} {d}/{d} {d:0.1}% {d}\n", .{
+                index,
+                tris,
+                state.target_terrain_tris,
+                ratio * 100,
+                state.terrain_detail,
+            });
+            const len = @min(mesh.vertexes.items.len, mesh.vbo_capacity);
+            @memcpy(vbo, mesh.vertexes.items[0..len]);
             mesh.vbo_dirty = false;
         }
 
         if (mesh.ebo_memory) |ebo| {
-            @memcpy(ebo, mesh.indexes.items);
+            const len = @min(mesh.indexes.items.len, mesh.ebo_capacity);
+            @memcpy(ebo, mesh.indexes.items[0..len]);
             mesh.ebo_dirty = false;
         }
 
-        const tris : f32 = @floatFromInt (mesh.indexes.items.len / 3);
+        if (tris < state.target_terrain_tris * 0.5) {
+            state.terrain_detail *= 1.4;
 
-        if (tris < state.target_terrain_tris * 0.95 or tris > state.target_terrain_tris * 1.05)
-        {
-            state.terrain_detail -= (tris - state.target_terrain_tris) / state.target_terrain_tris;
-            state.terrain_detail = @max (1, @min (100, state.terrain_detail));
+            state.terrain_generation_requested = false;
+            state.terrain_generation_ready = true;
+        } else if (tris < state.target_terrain_tris * 0.65) {
+            state.terrain_detail *= 1.2;
+
+            state.terrain_generation_requested = false;
+            state.terrain_generation_ready = true;
+        } else if (tris < state.target_terrain_tris * 0.8) {
+            state.terrain_detail *= 1.01;
+
+            state.terrain_generation_requested = false;
+            state.terrain_generation_ready = true;
+        } else if (tris > state.target_terrain_tris * 0.95) {
+            state.terrain_detail *= 0.9;
+            state.terrain_generation_requested = true;
+            mesh.reset() catch {};
+        } else {
+            state.terrain_generation_requested = false;
+            state.terrain_generation_ready = true;
         }
-
-        state.terrain_generation_requested = false;
-        state.terrain_generation_ready = true;
+        state.terrain_detail = @max(1, @min(500, state.terrain_detail));
     }
 }
 
@@ -963,13 +977,13 @@ fn create_terrain_mesh() !void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn create_terrain_mesh_quad (mesh: *TerrainMesh, x: f32, y: f32, s: f32) !bool {
+fn create_terrain_mesh_quad(mesh: *TerrainMesh, x: f32, y: f32, s: f32) !bool {
     const ax = state.main_camera.position[0];
     const ay = state.main_camera.position[1];
     const bx = state.main_camera.target[0];
     const by = state.main_camera.target[1];
-    const cx = x + s/2;
-    const cy = y + s/2;
+    const cx = x + s / 2;
+    const cy = y + s / 2;
 
     const abx = ax - bx;
     const aby = ay - by;
@@ -985,40 +999,31 @@ fn create_terrain_mesh_quad (mesh: *TerrainMesh, x: f32, y: f32, s: f32) !bool {
 
     var distance: f32 = 0;
 
-    if (ab_bc > 0)
-    {
-        distance = @sqrt ((cx-bx)*(cx-bx) + (cy-by)*(cy-by));
-    }
-    else if (ab_ac < 0)
-    {
-        distance = @sqrt ((cx-ax)*(cx-ax) + (cy-ay)*(cy-ay));
-    }
-    else
-    {
-        const nom = @sqrt (abx * abx + aby * aby);
-        const dem = @abs (abx * acy - aby * acx);
+    if (ab_bc > 0) {
+        distance = @sqrt((cx - bx) * (cx - bx) + (cy - by) * (cy - by));
+    } else if (ab_ac < 0) {
+        distance = @sqrt((cx - ax) * (cx - ax) + (cy - ay) * (cy - ay));
+    } else {
+        const nom = @sqrt(abx * abx + aby * aby);
+        const dem = @abs(abx * acy - aby * acx);
         distance = dem / nom;
     }
 
-    if (s > 16 and distance < s * state.terrain_detail)
-    {
-        const sp = mesh.savepoint ();
-        const flat1 = try create_terrain_mesh_quad (mesh, x, y, s/2);
-        const flat2 = try create_terrain_mesh_quad (mesh, x+s/2, y, s/2);
-        const flat3 = try create_terrain_mesh_quad (mesh, x, y+s/2, s/2);
-        const flat4 = try create_terrain_mesh_quad (mesh, x+s/2, y+s/2, s/2);
+    if (s > 16 and distance < s * state.terrain_detail and mesh.vertexes.items.len < max_terrain_vertex_capacity) {
+        const sp = mesh.savepoint();
+        const flat1 = try create_terrain_mesh_quad(mesh, x, y, s / 2);
+        const flat2 = try create_terrain_mesh_quad(mesh, x + s / 2, y, s / 2);
+        const flat3 = try create_terrain_mesh_quad(mesh, x, y + s / 2, s / 2);
+        const flat4 = try create_terrain_mesh_quad(mesh, x + s / 2, y + s / 2, s / 2);
 
-        if (flat1 and flat2 and flat3 and flat4)
-        {
-            mesh.restore (sp);
-            return try create_mesh_quad (mesh, x, y, s);
+        if (flat1 and flat2 and flat3 and flat4) {
+            mesh.restore(sp);
+            return try create_mesh_quad(mesh, x, y, s);
         }
 
         return false;
-    }
-    else
-    {
-        return try create_mesh_quad (mesh, x, y, s);
+    } else {
+        return try create_mesh_quad(mesh, x, y, s);
     }
 }
 
@@ -1027,10 +1032,10 @@ fn create_terrain_mesh_quad (mesh: *TerrainMesh, x: f32, y: f32, s: f32) !bool {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn create_mesh_quad(mesh: *TerrainMesh, x: f32, y: f32, s: f32) !bool {
-    const h1 = get_point_elevation (x, y);
-    const h2 = get_point_elevation (x + s, y);
-    const h3 = get_point_elevation (x, y + s);
-    const h4 = get_point_elevation (x + s, y + s);
+    const h1 = get_point_elevation(x, y);
+    const h2 = get_point_elevation(x + s, y);
+    const h3 = get_point_elevation(x, y + s);
+    const h4 = get_point_elevation(x + s, y + s);
 
     const v1 = try add_map_vertex(mesh, x, y, h1);
     const v2 = try add_map_vertex(mesh, x + s, y, h2);
@@ -1165,7 +1170,7 @@ fn begin_3d() void {
 
     const projection = math.perspectiveFovLhGl(std.math.pi / 3.0, aspect, near, far);
 
-    const camera_position = [3]f32 {
+    const camera_position = [3]f32{
         state.main_camera.position[0],
         state.main_camera.position[1],
         state.main_camera.position[2],

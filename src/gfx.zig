@@ -96,6 +96,9 @@ pub fn Mesh(comptime T: type) type {
         vbo_dirty: bool = true,
         ebo_dirty: bool = true,
 
+        vbo_capacity: usize = 0,
+        ebo_capacity: usize = 0,
+
         vbo_memory: ?[*]T = null,
         ebo_memory: ?[*]u32 = null,
 
@@ -147,12 +150,12 @@ pub fn Mesh(comptime T: type) type {
             self.indexes.deinit();
         }
 
-        pub fn setCapacity(self: *Self, capacity: usize) !void {
+        pub fn set_capacity(self: *Self, vertex_capacity: usize, index_capacity: usize) !void {
             const dirty_zone = tracy.ZoneNC(@src(), "Mesh.setCapacity", 0x00_80_80_80);
             defer dirty_zone.End();
 
-            try self.vertexes.ensureTotalCapacity(capacity);
-            try self.indexes.ensureTotalCapacity(capacity);
+            try self.vertexes.ensureTotalCapacity(vertex_capacity);
+            try self.indexes.ensureTotalCapacity(index_capacity);
 
             gl.bindVertexArray(self.vao);
             gl.bindBuffer(gl.ARRAY_BUFFER, self.vbo);
@@ -175,20 +178,22 @@ pub fn Mesh(comptime T: type) type {
 
             gl.bindVertexArray(0);
 
+            self.vbo_capacity = self.vertexes.capacity;
+            self.ebo_capacity = self.indexes.capacity;
             self.vbo_empty = false;
             self.ebo_empty = false;
         }
 
         const SavePoint = struct {
-            vi : usize,
-            ii : usize,
+            vi: usize,
+            ii: usize,
         };
 
-        pub fn savepoint (self: *Self) SavePoint {
+        pub fn savepoint(self: *Self) SavePoint {
             return .{ .vi = self.vertexes.items.len, .ii = self.indexes.items.len };
         }
 
-        pub fn restore (self: *Self, sp: SavePoint) void {
+        pub fn restore(self: *Self, sp: SavePoint) void {
             self.vertexes.items.len = sp.vi;
             self.indexes.items.len = sp.ii;
         }
@@ -442,7 +447,7 @@ pub const Shader = struct {
         defer zone.End();
         const location = gl.getUniformLocation(self.id, name);
         if (location == -1) {
-            std.debug.print("Unknown uniform {s} in {s}\n", .{name, self.label});
+            std.debug.print("Unknown uniform {s} in {s}\n", .{ name, self.label });
         }
         gl.uniform3f(location, value[0], value[1], value[2]);
     }
@@ -452,7 +457,7 @@ pub const Shader = struct {
         defer zone.End();
         const location = gl.getUniformLocation(self.id, name);
         if (location == -1) {
-            std.debug.print("Unknown uniform {s} is {s}\n", .{name, self.label});
+            std.debug.print("Unknown uniform {s} is {s}\n", .{ name, self.label });
         }
         gl.uniform4f(location, value[0], value[1], value[2], value[3]);
     }
@@ -462,7 +467,7 @@ pub const Shader = struct {
         defer zone.End();
         const location = gl.getUniformLocation(self.id, name);
         if (location == -1) {
-            std.debug.print("Unknown uniform {s} is {s}\n", .{name, self.label});
+            std.debug.print("Unknown uniform {s} is {s}\n", .{ name, self.label });
         }
         gl.uniformMatrix4fv(location, 1, gl.FALSE, math.arrNPtr(&value));
     }
