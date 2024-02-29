@@ -38,7 +38,7 @@ const default_camera_zoom = 1000;
 
 const terrain_cell_size = 16;
 
-const max_terrain_tris = 100_000;
+const max_terrain_tris = 500_000;
 const max_terrain_vertex_capacity = 2 * max_terrain_tris; // four points per quad: two per tri
 const max_terrain_index_capacity = 3 * max_terrain_tris; // six indexes per quad: three per tri
 
@@ -306,6 +306,12 @@ fn init_height_map() !void {
             }
         }
     }
+
+    // mark the centre of the map
+    state.height_map[2047][2047] = 100;
+    state.height_map[2047][2048] = 100;
+    state.height_map[2048][2047] = 100;
+    state.height_map[2048][2048] = 100;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -430,7 +436,7 @@ fn update_camera() void {
         }
 
         if (state.main_window.getKey(.x) == .press) {
-            state.camera_zoom = @min(2000, state.camera_zoom + fast_multiplier * state.zoom_velocity * state.delta_time);
+            state.camera_zoom = @min(10000, state.camera_zoom + fast_multiplier * state.zoom_velocity * state.delta_time);
             moving = true;
         }
 
@@ -541,11 +547,10 @@ fn draw_debug() void {
 
     if (state.show_debug) {
         if (gui.begin("Settings", .{})) {
-            if (gui.treeNode ("Terrain"))
-            {
-                _ = gui.sliderFloat ("Terrain", .{
+            if (gui.treeNode("Terrain")) {
+                _ = gui.sliderFloat("Terrain", .{
                     .v = &state.user_terrain_detail,
-                    .min = 0.1,
+                    .min = 0.2,
                     .max = 1.0,
                     .cfmt = "%.2f",
                     .flags = .{
@@ -553,7 +558,7 @@ fn draw_debug() void {
                         .no_input = true,
                     },
                 });
-                gui.treePop ();
+                gui.treePop();
             }
         }
         gui.end();
@@ -593,7 +598,9 @@ fn draw_fps() void {
         })) {
             gui.text("fps: {d:0.0} / {d:0.1} ms", .{ state.fps, state.delta_time * 1000 });
             if (state.terrain_mesh[state.terrain_frame_index]) |mesh| {
-                gui.text("terrain: {d} tris {d:0.1}", .{ mesh.indexes.items.len / 3, state.terrain_detail });
+                const tris = mesh.indexes.items.len / 3;
+                const ratio: f32 = @as (f32, @floatFromInt (tris)) / (state.user_terrain_detail * state.target_terrain_tris);
+                gui.text("terrain: {d} tris {d:0.1} {d:0.1}%", .{ tris, state.terrain_detail, ratio * 100, });
             }
         }
         gui.end();
@@ -861,6 +868,8 @@ fn create_terrain_mesh_thread() void {
     var last_camera_target_x: f32 = 0;
     var last_camera_target_y: f32 = 0;
     var last_user_terrain_detail: f32 = 0;
+    var idle_count: usize = 0;
+
     while (state.running) {
         if (state.terrain_generation_requested) {
             var dirty = false;
@@ -891,10 +900,17 @@ fn create_terrain_mesh_thread() void {
 
             if (dirty) {
                 create_terrain_mesh() catch {};
+                idle_count = 0;
+            } else {
+                idle_count += 1;
             }
         }
 
-        std.time.sleep(50 * std.time.ns_per_ms);
+        if (idle_count < 100) {
+            std.time.sleep(1 * std.time.ns_per_ms);
+        } else {
+            std.time.sleep(100 * std.time.ns_per_ms);
+        }
     }
 }
 
@@ -909,19 +925,156 @@ fn create_terrain_mesh() !void {
     const index = state.terrain_frame_index +% 1;
 
     if (state.terrain_mesh[index]) |*mesh| {
-        const grid_size: f32 = 4096;
+        const max_lod = 4;
+        const grid_size: f32 = @floatFromInt (16 << max_lod);
 
-        var x: f32 = 0;
-        while (x < 64 * 1024) : (x += grid_size) {
-            var y: f32 = 0;
-            while (y < 64 * 1024) : (y += grid_size) {
-                _ = try create_terrain_mesh_quad(mesh, x, y, grid_size);
+        const lod_size: i32 = @intFromFloat (64*1024 / grid_size);
+
+        var grid_lod: [lod_size][lod_size]i8 = undefined;
+
+        for (0..8) |_|
+        {
+            for (0..lod_size) |iy| {
+                for (0..lod_size) |ix| {
+                    grid_lod[iy][ix] = 0;
+                }
+            }
+
+            const ax : f32 = std.math.clamp (state.main_camera.position[0], 0, max_map_x);
+            const ay : f32 = std.math.clamp (state.main_camera.position[1], 0, max_map_y);
+
+            const bx : f32 = std.math.clamp (state.main_camera.target[0], 0, max_map_x);
+            const by : f32 = std.math.clamp (state.main_camera.target[1], 0, max_map_y);
+
+            for (0..lod_size) |iy| {
+                for (0..lod_size) |ix| {
+                    var distance : f32 = @max (max_map_x, max_map_y);
+                    for (0..3) |gy|
+                    {
+                        for (0..3) |gx|
+                        {
+                            const x_offset = @as (f32, @floatFromInt (gx)) * grid_size / 2;
+                            const y_offset = @as (f32, @floatFromInt (gy)) * grid_size / 2;
+                            const cx = @as (f32, @floatFromInt (ix)) * grid_size + x_offset;
+                            const cy = @as (f32, @floatFromInt (iy)) * grid_size + y_offset;
+
+                            const dx = ax - cx;
+                            const dy = ay - cy;
+                            const dist_a = @sqrt (dx * dx + dy * dy);
+
+                            const ex = bx - cx;
+                            const ey = by - cy;
+                            const dist_b = @sqrt (ex * ex + ey * ey);
+
+                            if (dist_a < distance) { distance = dist_a; }
+                            if (dist_b < distance) { distance = dist_b; }
+                        }
+                    }
+
+                    var test_grid_size: f32 = 16;
+                    var lod : i8 = max_lod;
+                    while (test_grid_size <= grid_size) : (test_grid_size *= 2)
+                    {
+                        if (distance > 16*1024 or distance > 48*1024 * state.user_terrain_detail)
+                        {
+                            grid_lod[iy][ix] = -1;
+                            break;
+                        }
+                        else if (distance < test_grid_size * state.terrain_detail)
+                        {
+                            grid_lod[iy][ix] = lod;
+                            break;
+                        }
+
+                        lod -= 1;
+                    }
+                }
+            }
+
+            if (true)
+            {
+                for (0..lod_size) |iy| {
+                    for (0..lod_size) |ix| {
+                        const lod = grid_lod[iy][ix] - 1;
+                        if (iy < lod_size-1 and lod >= grid_lod[iy+1][ix])
+                        {
+                            grid_lod[iy+1][ix] = lod;
+                        }
+                        if (ix < lod_size-1 and lod >= grid_lod[iy][ix+1])
+                        {
+                            grid_lod[iy][ix+1] = lod;
+                        }
+                    }
+                }
+
+                for (0..lod_size) |iiy| {
+                    for (0..lod_size) |iix| {
+                        const ix = lod_size-1 - iix;
+                        const iy = lod_size-1 - iiy;
+
+                        const lod = grid_lod[iy][ix] - 1;
+                        if (iy > 0 and lod >= grid_lod[iy-1][ix])
+                        {
+                            grid_lod[iy-1][ix] = lod;
+                        }
+                        if (ix > 0 and lod >= grid_lod[iy][ix-1])
+                        {
+                            grid_lod[iy][ix-1] = lod;
+                        }
+                    }
+                }
+            }
+
+            var count_tris : usize = 0;
+            for (0..lod_size) |iy|
+            {
+                for (0..lod_size) |ix|
+                {
+                    if (grid_lod[iy][ix] >= 0)
+                    {
+                        count_tris += @as (usize, 2) << @intCast (grid_lod[iy][ix] * 2);
+                    }
+                }
+            }
+
+            const tris: f32 = @floatFromInt (count_tris);
+
+            const ratio = tris / (state.user_terrain_detail * state.target_terrain_tris);
+            const full_ratio = tris / state.target_terrain_tris;
+
+            if (full_ratio > 0.95)
+            {
+                state.terrain_detail = state.terrain_detail / 2;
+            }
+            else if (ratio < 0.75 or ratio > 1)
+            {
+                state.terrain_detail = state.terrain_detail / (ratio + 0.2);
+            }
+            else
+            {
+                break;
+            }
+
+            state.terrain_detail = @max(1, @min(100, state.terrain_detail));
+            if (state.terrain_detail == 1 or state.terrain_detail == 100)
+            {
+                break;
             }
         }
 
-        const tris: f32 = @floatFromInt(mesh.indexes.items.len / 3);
-
-        const ratio = tris / (state.user_terrain_detail * state.target_terrain_tris);
+        var y: f32 = 0;
+        while (y < 64 * 1024) : (y += grid_size) {
+            const iy : usize = @intFromFloat(y / grid_size);
+            var x: f32 = 0;
+            while (x < 64 * 1024) : (x += grid_size) {
+                const ix : usize = @intFromFloat(x / grid_size);
+                const lod = grid_lod[iy][ix];
+                if (lod >= 0)
+                {
+                    _ = try create_terrain_mesh_quad(mesh, x, y, grid_size, lod);
+                }
+            }
+        }
 
         if (mesh.vbo_memory) |vbo| {
             const len = @min(mesh.vertexes.items.len, mesh.vbo_capacity);
@@ -935,30 +1088,8 @@ fn create_terrain_mesh() !void {
             mesh.ebo_dirty = false;
         }
 
-        if (ratio < 0.5) {
-            state.terrain_detail *= 1.4;
-
-            state.terrain_generation_requested = false;
-            state.terrain_generation_ready = true;
-        } else if (ratio < 0.65) {
-            state.terrain_detail *= 1.2;
-
-            state.terrain_generation_requested = false;
-            state.terrain_generation_ready = true;
-        } else if (ratio < 0.8) {
-            state.terrain_detail *= 1.01;
-
-            state.terrain_generation_requested = false;
-            state.terrain_generation_ready = true;
-        } else if (ratio > 0.95) {
-            state.terrain_detail *= 0.9;
-            state.terrain_generation_requested = true;
-            mesh.reset() catch {};
-        } else {
-            state.terrain_generation_requested = false;
-            state.terrain_generation_ready = true;
-        }
-        state.terrain_detail = @max(1, @min(500, state.terrain_detail));
+        state.terrain_generation_requested = false;
+        state.terrain_generation_ready = true;
     }
 }
 
@@ -966,55 +1097,70 @@ fn create_terrain_mesh() !void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn create_terrain_mesh_quad(mesh: *TerrainMesh, x: f32, y: f32, s: f32) !bool {
-    const ax = state.main_camera.position[0];
-    const ay = state.main_camera.position[1];
-    const bx = state.main_camera.target[0];
-    const by = state.main_camera.target[1];
-    const cx = x + s / 2;
-    const cy = y + s / 2;
-
-    const abx = ax - bx;
-    const aby = ay - by;
-
-    const bcx = bx - cx;
-    const bcy = by - cy;
-
-    const acx = ax - cx;
-    const acy = ay - cy;
-
-    const ab_bc = (abx * bcx + aby * bcy);
-    const ab_ac = (abx * acx + aby * acy);
-
-    var distance: f32 = 0;
-
-    if (ab_bc > 0) {
-        distance = @sqrt((cx - bx) * (cx - bx) + (cy - by) * (cy - by));
-    } else if (ab_ac < 0) {
-        distance = @sqrt((cx - ax) * (cx - ax) + (cy - ay) * (cy - ay));
-    } else {
-        const nom = @sqrt(abx * abx + aby * aby);
-        const dem = @abs(abx * acy - aby * acx);
-        distance = dem / nom;
-    }
-
-    if (s > 16 and distance < s * state.terrain_detail and mesh.vertexes.items.len < max_terrain_vertex_capacity) {
+fn create_terrain_mesh_quad(mesh: *TerrainMesh, x: f32, y: f32, s: f32, lod: i8) !bool {
+    if (lod > 0)
+    {
         const sp = mesh.savepoint();
-        const flat1 = try create_terrain_mesh_quad(mesh, x, y, s / 2);
-        const flat2 = try create_terrain_mesh_quad(mesh, x + s / 2, y, s / 2);
-        const flat3 = try create_terrain_mesh_quad(mesh, x, y + s / 2, s / 2);
-        const flat4 = try create_terrain_mesh_quad(mesh, x + s / 2, y + s / 2, s / 2);
+        const flat1 = try create_terrain_mesh_quad(mesh, x, y, s / 2, lod - 1);
+        const flat2 = try create_terrain_mesh_quad(mesh, x + s / 2, y, s / 2, lod - 1);
+        const flat3 = try create_terrain_mesh_quad(mesh, x, y + s / 2, s / 2, lod - 1);
+        const flat4 = try create_terrain_mesh_quad(mesh, x + s / 2, y + s / 2, s / 2, lod - 1);
 
         if (flat1 and flat2 and flat3 and flat4) {
             mesh.restore(sp);
             return try create_mesh_quad(mesh, x, y, s);
         }
-
         return false;
     } else {
         return try create_mesh_quad(mesh, x, y, s);
     }
 }
+
+    // const ax = state.main_camera.position[0];
+    // const ay = state.main_camera.position[1];
+    // const bx = state.main_camera.target[0];
+    // const by = state.main_camera.target[1];
+    // const cx = x + s / 2;
+    // const cy = y + s / 2;
+
+    // const abx = ax - bx;
+    // const aby = ay - by;
+
+    // const bcx = bx - cx;
+    // const bcy = by - cy;
+
+    // const acx = ax - cx;
+    // const acy = ay - cy;
+
+    // const ab_bc = (abx * bcx + aby * bcy);
+    // const ab_ac = (abx * acx + aby * acy);
+
+    // var distance: f32 = 0;
+
+    // if (ab_bc > 0) {
+        // distance = @sqrt((cx - bx) * (cx - bx) + (cy - by) * (cy - by));
+    // } else if (ab_ac < 0) {
+        // distance = @sqrt((cx - ax) * (cx - ax) + (cy - ay) * (cy - ay));
+    // } else {
+        // const nom = @sqrt(abx * abx + aby * aby);
+        // const dem = @abs(abx * acy - aby * acx);
+        // distance = dem / nom;
+    // }
+
+    // if (false and s > 16 and distance < s * state.terrain_detail and mesh.vertexes.items.len < max_terrain_vertex_capacity) {
+        // const sp = mesh.savepoint();
+        // const flat1 = try create_terrain_mesh_quad(mesh, x, y, s / 2);
+        // const flat2 = try create_terrain_mesh_quad(mesh, x + s / 2, y, s / 2);
+        // const flat3 = try create_terrain_mesh_quad(mesh, x, y + s / 2, s / 2);
+        // const flat4 = try create_terrain_mesh_quad(mesh, x + s / 2, y + s / 2, s / 2);
+
+        // if (flat1 and flat2 and flat3 and flat4) {
+            // mesh.restore(sp);
+            // return try create_mesh_quad(mesh, x, y, s);
+        // }
+
+        // return false;
+    // }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
