@@ -38,7 +38,7 @@ const default_camera_zoom = 1000;
 
 const terrain_cell_size = 16;
 
-const max_terrain_tris = 1_000_000;
+const max_terrain_tris = 100_000;
 const max_terrain_vertex_capacity = 2 * max_terrain_tris; // four points per quad: two per tri
 const max_terrain_index_capacity = 3 * max_terrain_tris; // six indexes per quad: three per tri
 
@@ -90,10 +90,13 @@ pub const State = struct {
     terrain_generation_requested: bool = false,
     terrain_generation_ready: bool = false,
 
-    target_terrain_tris: f32 = max_terrain_tris * 0.9,
+    target_terrain_tris: f32 = max_terrain_tris,
     terrain_detail: f32 = 1,
     terrain_frame_index: u1 = 0,
     terrain_mesh: [2]?TerrainMesh = .{ null, null },
+
+    user_terrain_detail: f32 = 1.0,
+    user_demo_window: bool = true,
 
     axes: Mesh = undefined,
 
@@ -509,16 +512,23 @@ fn draw_gui() void {
     const zone = tracy.ZoneNC(@src(), "draw_gui", 0x00_ff_00_00);
     defer zone.End();
 
-    const fb_zone = tracy.ZoneNC(@src(), "gui.backend.newFrame", 0x00800000);
-    gui.backend.newFrame(@intCast(state.width), @intCast(state.height));
-    fb_zone.End();
+    {
+        const fb_zone = tracy.ZoneNC(@src(), "gui.backend.newFrame", 0x00800000);
+        defer fb_zone.End();
+
+        gui.backend.newFrame(@intCast(state.width), @intCast(state.height));
+    }
 
     draw_debug();
     draw_fps();
+    // gui.showDemoWindow (&state.user_demo_window);
 
-    const draw_zone = tracy.ZoneNC(@src(), "gui.backend.draw", 0x00800000);
-    gui.backend.draw();
-    draw_zone.End();
+    {
+        const draw_zone = tracy.ZoneNC(@src(), "gui.backend.draw", 0x00800000);
+        defer draw_zone.End();
+
+        gui.backend.draw();
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -530,26 +540,20 @@ fn draw_debug() void {
     defer zone.End();
 
     if (state.show_debug) {
-        if (gui.begin("Debug", .{})) {
-            if (gui.button("Hello", .{})) {
-                std.debug.print("Hello Button\n", .{});
-            }
-
-            var input_text: [32]u8 = undefined;
-            input_text[0] = 0;
-
-            if (gui.inputText("Input", .{
-                .buf = &input_text,
-                .flags = .{
-                    .enter_returns_true = true,
-                    .escape_clears_all = true,
-                    .callback_completion = true,
-                },
-                .callback = input_text_callback,
-            })) {
-                const len = std.mem.indexOfSentinel(u8, '\x00', @ptrCast(&input_text));
-                const slice = std.mem.trim(u8, input_text[0..len], " ");
-                std.debug.print("'{'}'\n", .{std.zig.fmtEscapes(slice)});
+        if (gui.begin("Settings", .{})) {
+            if (gui.treeNode ("Terrain"))
+            {
+                _ = gui.sliderFloat ("Terrain", .{
+                    .v = &state.user_terrain_detail,
+                    .min = 0.1,
+                    .max = 1.0,
+                    .cfmt = "%.2f",
+                    .flags = .{
+                        .always_clamp = true,
+                        .no_input = true,
+                    },
+                });
+                gui.treePop ();
             }
         }
         gui.end();
@@ -601,19 +605,6 @@ fn draw_fps() void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn draw_frame_times() void {}
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-fn input_text_callback(data: *gui.InputTextCallbackData) i32 {
-    const zone = tracy.ZoneNC(@src(), "input_text_callback", 0x00_ff_00_00);
-    defer zone.End();
-
-    const slice = data.buf[0..@intCast(data.buf_text_len)];
-    std.debug.print("'{'}'\n", .{std.zig.fmtEscapes(slice)});
-    return 0;
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -869,6 +860,7 @@ fn create_terrain_mesh_thread() void {
     var last_camera_position_y: f32 = 0;
     var last_camera_target_x: f32 = 0;
     var last_camera_target_y: f32 = 0;
+    var last_user_terrain_detail: f32 = 0;
     while (state.running) {
         if (state.terrain_generation_requested) {
             var dirty = false;
@@ -890,6 +882,10 @@ fn create_terrain_mesh_thread() void {
             }
             if (last_camera_target_y != state.main_camera.target[1]) {
                 last_camera_target_y = state.main_camera.target[1];
+                dirty = true;
+            }
+            if (last_user_terrain_detail != state.user_terrain_detail) {
+                last_user_terrain_detail = state.user_terrain_detail;
                 dirty = true;
             }
 
@@ -925,16 +921,9 @@ fn create_terrain_mesh() !void {
 
         const tris: f32 = @floatFromInt(mesh.indexes.items.len / 3);
 
-        const ratio = tris / state.target_terrain_tris;
+        const ratio = tris / (state.user_terrain_detail * state.target_terrain_tris);
 
         if (mesh.vbo_memory) |vbo| {
-            std.debug.print("{} {d}/{d} {d:0.1}% {d}\n", .{
-                index,
-                tris,
-                state.target_terrain_tris,
-                ratio * 100,
-                state.terrain_detail,
-            });
             const len = @min(mesh.vertexes.items.len, mesh.vbo_capacity);
             @memcpy(vbo, mesh.vertexes.items[0..len]);
             mesh.vbo_dirty = false;
@@ -946,22 +935,22 @@ fn create_terrain_mesh() !void {
             mesh.ebo_dirty = false;
         }
 
-        if (tris < state.target_terrain_tris * 0.5) {
+        if (ratio < 0.5) {
             state.terrain_detail *= 1.4;
 
             state.terrain_generation_requested = false;
             state.terrain_generation_ready = true;
-        } else if (tris < state.target_terrain_tris * 0.65) {
+        } else if (ratio < 0.65) {
             state.terrain_detail *= 1.2;
 
             state.terrain_generation_requested = false;
             state.terrain_generation_ready = true;
-        } else if (tris < state.target_terrain_tris * 0.8) {
+        } else if (ratio < 0.8) {
             state.terrain_detail *= 1.01;
 
             state.terrain_generation_requested = false;
             state.terrain_generation_ready = true;
-        } else if (tris > state.target_terrain_tris * 0.95) {
+        } else if (ratio > 0.95) {
             state.terrain_detail *= 0.9;
             state.terrain_generation_requested = true;
             mesh.reset() catch {};
