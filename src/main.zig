@@ -213,8 +213,8 @@ pub fn main() !void {
     state.fade_to_color[1] = 0.35;
     state.fade_to_color[2] = 0.35;
 
-    try terrain.init ();
-    defer terrain.deinit ();
+    try terrain.init();
+    defer terrain.deinit();
 
     main_start_zone.End();
 
