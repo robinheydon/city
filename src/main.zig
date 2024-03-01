@@ -52,7 +52,7 @@ pub const State = struct {
     show_fps: bool = true,
     show_terrain: bool = true,
     show_axes: bool = false,
-    show_wireframe: bool = true,
+    show_wireframe: bool = false,
     show_grid: bool = false,
 
     gui_capture_mouse: bool = false,
@@ -94,6 +94,9 @@ pub const State = struct {
     terrain_detail: f32 = 1,
     terrain_frame_index: u1 = 0,
     terrain_mesh: [2]?TerrainMesh = .{ null, null },
+
+    sun_angle: f32 = 45,
+    sun_direction: f32 = 0,
 
     user_terrain_detail: f32 = 1.0,
     user_demo_window: bool = true,
@@ -553,6 +556,29 @@ fn draw_debug() void {
                     .min = 0.2,
                     .max = 1.0,
                     .cfmt = "%.2f",
+                    .flags = .{
+                        .always_clamp = true,
+                        .no_input = true,
+                    },
+                });
+                gui.treePop();
+            }
+            if (gui.treeNode("Sun")) {
+                _ = gui.sliderFloat("angle", .{
+                    .v = &state.sun_angle,
+                    .min = 0.0,
+                    .max = 80.0,
+                    .cfmt = "%.0f",
+                    .flags = .{
+                        .always_clamp = true,
+                        .no_input = true,
+                    },
+                });
+                _ = gui.sliderFloat("direction", .{
+                    .v = &state.sun_direction,
+                    .min = 0.0,
+                    .max = 360.0,
+                    .cfmt = "%.0f",
                     .flags = .{
                         .always_clamp = true,
                         .no_input = true,
@@ -1116,52 +1142,6 @@ fn create_terrain_mesh_quad(mesh: *TerrainMesh, x: f32, y: f32, s: f32, lod: i8)
     }
 }
 
-    // const ax = state.main_camera.position[0];
-    // const ay = state.main_camera.position[1];
-    // const bx = state.main_camera.target[0];
-    // const by = state.main_camera.target[1];
-    // const cx = x + s / 2;
-    // const cy = y + s / 2;
-
-    // const abx = ax - bx;
-    // const aby = ay - by;
-
-    // const bcx = bx - cx;
-    // const bcy = by - cy;
-
-    // const acx = ax - cx;
-    // const acy = ay - cy;
-
-    // const ab_bc = (abx * bcx + aby * bcy);
-    // const ab_ac = (abx * acx + aby * acy);
-
-    // var distance: f32 = 0;
-
-    // if (ab_bc > 0) {
-        // distance = @sqrt((cx - bx) * (cx - bx) + (cy - by) * (cy - by));
-    // } else if (ab_ac < 0) {
-        // distance = @sqrt((cx - ax) * (cx - ax) + (cy - ay) * (cy - ay));
-    // } else {
-        // const nom = @sqrt(abx * abx + aby * aby);
-        // const dem = @abs(abx * acy - aby * acx);
-        // distance = dem / nom;
-    // }
-
-    // if (false and s > 16 and distance < s * state.terrain_detail and mesh.vertexes.items.len < max_terrain_vertex_capacity) {
-        // const sp = mesh.savepoint();
-        // const flat1 = try create_terrain_mesh_quad(mesh, x, y, s / 2);
-        // const flat2 = try create_terrain_mesh_quad(mesh, x + s / 2, y, s / 2);
-        // const flat3 = try create_terrain_mesh_quad(mesh, x, y + s / 2, s / 2);
-        // const flat4 = try create_terrain_mesh_quad(mesh, x + s / 2, y + s / 2, s / 2);
-
-        // if (flat1 and flat2 and flat3 and flat4) {
-            // mesh.restore(sp);
-            // return try create_mesh_quad(mesh, x, y, s);
-        // }
-
-        // return false;
-    // }
-
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -1172,10 +1152,26 @@ fn create_mesh_quad(mesh: *TerrainMesh, x: f32, y: f32, s: f32) !bool {
     const h3 = get_point_elevation(x, y + s);
     const h4 = get_point_elevation(x + s, y + s);
 
-    const v1 = try add_map_vertex(mesh, x, y, h1);
-    const v2 = try add_map_vertex(mesh, x + s, y, h2);
-    const v3 = try add_map_vertex(mesh, x, y + s, h3);
-    const v4 = try add_map_vertex(mesh, x + s, y + s, h4);
+    const p1 = math.f32x4 (x, y, h1, 1);
+    const p2 = math.f32x4 (x+s, y, h2, 1);
+    const p3 = math.f32x4 (x, y+s, h3, 1);
+    const p4 = math.f32x4 (x+s, y+s, h4, 1);
+    const p12 = p2 - p1;
+    const p13 = p3 - p1;
+    const p43 = p3 - p4;
+    const p42 = p2 - p4;
+
+    const n1 = math.cross3 (p12, p13);
+    const n2 = math.cross3 (p43, p42);
+
+    const n3 = n1 + n2;
+    const normal = math.vecToArr3 (math.normalize3 (n3));
+    // const normal = math.vecToArr3 (math.normalize3 (n1));
+
+    const v1 = try add_map_vertex(mesh, x, y, h1, normal);
+    const v2 = try add_map_vertex(mesh, x + s, y, h2, normal);
+    const v3 = try add_map_vertex(mesh, x, y + s, h3, normal);
+    const v4 = try add_map_vertex(mesh, x + s, y + s, h4, normal);
 
     // TODO: hinge the quad in a 'reasonable' way
 
@@ -1193,22 +1189,24 @@ fn create_mesh_quad(mesh: *TerrainMesh, x: f32, y: f32, s: f32) !bool {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn add_map_vertex(mesh: *TerrainMesh, x: f32, y: f32, z: f32) !u32 {
+fn add_map_vertex(mesh: *TerrainMesh, x: f32, y: f32, z: f32, normal: [3]f32) !u32 {
     if (z == 0) {
         const r = 0;
         const g = 0;
         const b = 1;
         return try mesh.addVertex(.{
-            .pos = .{ .x = x, .y = y, .z = z },
-            .col = .{ .r = r, .g = g, .b = b },
+            .position = .{ .x = x, .y = y, .z = z },
+            .color = .{ .r = r, .g = g, .b = b },
+            .normal = .{ .x = normal[0], .y = normal[1], .z = normal[2] },
         });
     } else {
-        const r = z / 2000;
-        const g = z / 1000;
-        const b = z / 3000;
+        const r = 0.2;
+        const g = 0.7;
+        const b = 0.3;
         return try mesh.addVertex(.{
-            .pos = .{ .x = x, .y = y, .z = z },
-            .col = .{ .r = r, .g = g, .b = b },
+            .position = .{ .x = x, .y = y, .z = z },
+            .color = .{ .r = r, .g = g, .b = b },
+            .normal = .{ .x = normal[0], .y = normal[1], .z = normal[2] },
         });
     }
 }
@@ -1235,28 +1233,34 @@ fn create_axes() !void {
 
     {
         const v1 = try state.axes.addVertex(.{
-            .pos = .{ .x = -10000, .y = 0, .z = 0 },
-            .col = .{ .r = 1, .g = 1, .b = 0 },
+            .position = .{ .x = -10000, .y = 0, .z = 0 },
+            .color = .{ .r = 1, .g = 1, .b = 0 },
+            .normal = .{ .x = 0, .y = 0, .z = 0 },
         });
         const v2 = try state.axes.addVertex(.{
-            .pos = .{ .x = 10000, .y = 0, .z = 0 },
-            .col = .{ .r = 1, .g = 1, .b = 0 },
+            .position = .{ .x = 10000, .y = 0, .z = 0 },
+            .color = .{ .r = 1, .g = 1, .b = 0 },
+            .normal = .{ .x = 0, .y = 0, .z = 0 },
         });
         const v3 = try state.axes.addVertex(.{
-            .pos = .{ .x = 0, .y = -10000, .z = 0 },
-            .col = .{ .r = 1, .g = 0, .b = 1 },
+            .position = .{ .x = 0, .y = -10000, .z = 0 },
+            .color = .{ .r = 1, .g = 0, .b = 1 },
+            .normal = .{ .x = 0, .y = 0, .z = 0 },
         });
         const v4 = try state.axes.addVertex(.{
-            .pos = .{ .x = 0, .y = 10000, .z = 0 },
-            .col = .{ .r = 1, .g = 0, .b = 1 },
+            .position = .{ .x = 0, .y = 10000, .z = 0 },
+            .color = .{ .r = 1, .g = 0, .b = 1 },
+            .normal = .{ .x = 0, .y = 0, .z = 0 },
         });
         const v5 = try state.axes.addVertex(.{
-            .pos = .{ .x = 0, .y = 0, .z = 0 },
-            .col = .{ .r = 0, .g = 1, .b = 1 },
+            .position = .{ .x = 0, .y = 0, .z = 0 },
+            .color = .{ .r = 0, .g = 1, .b = 1 },
+            .normal = .{ .x = 0, .y = 0, .z = 0 },
         });
         const v6 = try state.axes.addVertex(.{
-            .pos = .{ .x = 0, .y = 0, .z = 10000 },
-            .col = .{ .r = 0, .g = 1, .b = 1 },
+            .position = .{ .x = 0, .y = 0, .z = 10000 },
+            .color = .{ .r = 0, .g = 1, .b = 1 },
+            .normal = .{ .x = 0, .y = 0, .z = 0 },
         });
 
         try state.axes.addIndex(v1);
@@ -1311,8 +1315,17 @@ fn begin_3d() void {
         state.main_camera.position[2],
     };
 
+    const sun_x = @sin (state.sun_direction / 180 * std.math.pi);
+    const sun_y = @cos (state.sun_direction / 180 * std.math.pi);
+    const sun_z = @sin (state.sun_angle / 180 * std.math.pi);
+
+    const sun_direction = [3]f32{
+        sun_x, sun_y, sun_z,
+    };
+
     state.basic_shader.use();
     state.basic_shader.setUniform3f("camera", camera_position);
+    state.basic_shader.setUniform3f("sun_direction", sun_direction);
     state.basic_shader.setUniformMat("model", model);
     state.basic_shader.setUniformMat("view", view);
     state.basic_shader.setUniformMat("projection", projection);
@@ -1320,6 +1333,7 @@ fn begin_3d() void {
 
     state.terrain_shader.use();
     state.terrain_shader.setUniform3f("camera", camera_position);
+    state.terrain_shader.setUniform3f("sun_direction", sun_direction);
     state.terrain_shader.setUniformMat("model", model);
     state.terrain_shader.setUniformMat("view", view);
     state.terrain_shader.setUniformMat("projection", projection);

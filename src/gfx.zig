@@ -54,8 +54,9 @@ pub const Camera = struct {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 pub const Vertex = struct {
-    pos: Vector3,
-    col: Color3,
+    position: Vector3,
+    color: Color3,
+    normal: Vector3,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -63,8 +64,9 @@ pub const Vertex = struct {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 pub const TerrainVertex = struct {
-    pos: Vector3,
-    col: Color3,
+    position: Vector3,
+    color: Color3,
+    normal: Vector3,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -121,10 +123,13 @@ pub fn Mesh(comptime T: type) type {
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
 
             gl.enableVertexAttribArray(0);
-            gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, @sizeOf(Vertex), @ptrFromInt(@offsetOf(Vertex, "pos")));
+            gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, @sizeOf(Vertex), @ptrFromInt(@offsetOf(Vertex, "position")));
 
             gl.enableVertexAttribArray(1);
-            gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, @sizeOf(Vertex), @ptrFromInt(@offsetOf(Vertex, "col")));
+            gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, @sizeOf(Vertex), @ptrFromInt(@offsetOf(Vertex, "color")));
+
+            gl.enableVertexAttribArray(2);
+            gl.vertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, @sizeOf(Vertex), @ptrFromInt(@offsetOf(Vertex, "normal")));
 
             gl.bindVertexArray(0);
 
@@ -447,9 +452,12 @@ pub const Shader = struct {
         defer zone.End();
         const location = gl.getUniformLocation(self.id, name);
         if (location == -1) {
-            std.debug.print("Unknown uniform {s} in {s}\n", .{ name, self.label });
+            // std.debug.print("Unknown uniform {s} in {s}\n", .{ name, self.label });
         }
-        gl.uniform3f(location, value[0], value[1], value[2]);
+        else
+        {
+            gl.uniform3f(location, value[0], value[1], value[2]);
+        }
     }
 
     pub fn setUniform4f(self: Shader, name: [*c]const u8, value: [4]f32) void {
@@ -457,9 +465,12 @@ pub const Shader = struct {
         defer zone.End();
         const location = gl.getUniformLocation(self.id, name);
         if (location == -1) {
-            std.debug.print("Unknown uniform {s} is {s}\n", .{ name, self.label });
+            // std.debug.print("Unknown uniform {s} is {s}\n", .{ name, self.label });
         }
-        gl.uniform4f(location, value[0], value[1], value[2], value[3]);
+        else
+        {
+            gl.uniform4f(location, value[0], value[1], value[2], value[3]);
+        }
     }
 
     pub fn setUniformMat(self: Shader, name: [*c]const u8, value: math.Mat) void {
@@ -467,9 +478,12 @@ pub const Shader = struct {
         defer zone.End();
         const location = gl.getUniformLocation(self.id, name);
         if (location == -1) {
-            std.debug.print("Unknown uniform {s} is {s}\n", .{ name, self.label });
+            // std.debug.print("Unknown uniform {s} is {s}\n", .{ name, self.label });
         }
-        gl.uniformMatrix4fv(location, 1, gl.FALSE, math.arrNPtr(&value));
+        else
+        {
+            gl.uniformMatrix4fv(location, 1, gl.FALSE, math.arrNPtr(&value));
+        }
     }
 };
 
