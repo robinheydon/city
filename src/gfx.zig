@@ -447,6 +447,19 @@ pub const Shader = struct {
         gl.useProgram(0);
     }
 
+    pub fn setUniform1f(self: Shader, name: [*c]const u8, value: f32) void {
+        const zone = tracy.ZoneNC(@src(), "shader.setUniformf", 0x00_80_80_80);
+        defer zone.End();
+        const location = gl.getUniformLocation(self.id, name);
+        if (location == -1) {
+            // std.debug.print("Unknown uniform {s} in {s}\n", .{ name, self.label });
+        }
+        else
+        {
+            gl.uniform1f(location, value);
+        }
+    }
+
     pub fn setUniform3f(self: Shader, name: [*c]const u8, value: [3]f32) void {
         const zone = tracy.ZoneNC(@src(), "shader.setUniform3f", 0x00_80_80_80);
         defer zone.End();

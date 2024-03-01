@@ -53,7 +53,6 @@ pub const State = struct {
     show_terrain: bool = true,
     show_axes: bool = false,
     show_wireframe: bool = false,
-    show_grid: bool = false,
 
     gui_capture_mouse: bool = false,
     gui_capture_keyboard: bool = false,
@@ -97,6 +96,9 @@ pub const State = struct {
 
     sun_angle: f32 = 45,
     sun_direction: f32 = 0,
+
+    show_contour: f32 = 1,
+    show_grid: f32 = 1,
 
     user_terrain_detail: f32 = 1.0,
     user_demo_window: bool = true,
@@ -555,6 +557,26 @@ fn draw_debug() void {
                         .no_input = true,
                     },
                 });
+                _ = gui.sliderFloat("Contour", .{
+                    .v = &state.show_contour,
+                    .min = 0.0,
+                    .max = 1.0,
+                    .cfmt = "%.2f",
+                    .flags = .{
+                        .always_clamp = true,
+                        .no_input = true,
+                    },
+                });
+                _ = gui.sliderFloat("Grid", .{
+                    .v = &state.show_grid,
+                    .min = 0.0,
+                    .max = 1.0,
+                    .cfmt = "%.2f",
+                    .flags = .{
+                        .always_clamp = true,
+                        .no_input = true,
+                    },
+                });
                 gui.treePop();
             }
             if (gui.treeNode("Sun")) {
@@ -687,8 +709,6 @@ fn on_key(
         state.show_axes = !state.show_axes;
     } else if (key == .F5 and action == .press and mod == 0) {
         state.show_wireframe = !state.show_wireframe;
-    } else if (key == .F6 and action == .press and mod == 0) {
-        state.show_grid = !state.show_grid;
     }
 }
 
@@ -1184,9 +1204,9 @@ fn create_mesh_quad(mesh: *TerrainMesh, x: f32, y: f32, s: f32) !bool {
 fn add_map_vertex(mesh: *TerrainMesh, x: f32, y: f32, z: f32, normal: [3]f32) !u32 {
     // TODO: change color depending on normal
 
-    const r = 0.5 - normal[2] / 2;
-    const g = 0.7 - normal[2] / 2;
-    const b = 0.5 - normal[2] / 2;
+    const r = 0.0;
+    const g = 1.0 - normal[2] / 2;
+    const b = 0.0;
     return try mesh.addVertex(.{
         .position = .{ .x = x, .y = y, .z = z },
         .color = .{ .r = r, .g = g, .b = b },
@@ -1309,6 +1329,8 @@ fn begin_3d() void {
     state.basic_shader.use();
     state.basic_shader.setUniform3f("camera", camera_position);
     state.basic_shader.setUniform3f("sun_direction", sun_direction);
+    state.basic_shader.setUniform1f("show_contour", state.show_contour);
+    state.basic_shader.setUniform1f("show_grid", state.show_grid);
     state.basic_shader.setUniformMat("model", model);
     state.basic_shader.setUniformMat("view", view);
     state.basic_shader.setUniformMat("projection", projection);
@@ -1317,6 +1339,8 @@ fn begin_3d() void {
     state.terrain_shader.use();
     state.terrain_shader.setUniform3f("camera", camera_position);
     state.terrain_shader.setUniform3f("sun_direction", sun_direction);
+    state.terrain_shader.setUniform1f("show_contour", state.show_contour);
+    state.terrain_shader.setUniform1f("show_grid", state.show_grid);
     state.terrain_shader.setUniformMat("model", model);
     state.terrain_shader.setUniformMat("view", view);
     state.terrain_shader.setUniformMat("projection", projection);
