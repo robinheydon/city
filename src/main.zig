@@ -39,7 +39,7 @@ const default_camera_zoom = 1000;
 const terrain_cell_size = 16;
 
 const max_terrain_tris = 500_000;
-const max_terrain_vertex_capacity = 2 * max_terrain_tris; // four points per quad: two per tri
+const max_terrain_vertex_capacity = 3 * max_terrain_tris; // four points per quad: two per tri
 const max_terrain_index_capacity = 3 * max_terrain_tris; // six indexes per quad: three per tri
 
 pub const State = struct {
@@ -97,8 +97,8 @@ pub const State = struct {
     sun_angle: f32 = 45,
     sun_direction: f32 = 0,
 
-    show_contour: f32 = 1,
-    show_grid: f32 = 1,
+    show_contour: f32 = 0.1,
+    show_grid: f32 = 0.1,
 
     user_terrain_detail: f32 = 1.0,
     user_demo_window: bool = true,
@@ -311,6 +311,11 @@ fn init_height_map() !void {
             }
         }
     }
+
+    state.height_map[2047][2047] = 100;
+    state.height_map[2048][2047] = 100;
+    state.height_map[2047][2048] = 100;
+    state.height_map[2048][2048] = 100;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -1175,24 +1180,47 @@ fn create_mesh_quad(mesh: *TerrainMesh, x: f32, y: f32, s: f32) !bool {
     const p43 = p3 - p4;
     const p42 = p2 - p4;
 
-    const n1 = math.vecToArr3 (math.normalize3 (math.cross3 (p12, p13)));
-    const n2 = math.vecToArr3 (math.normalize3 (math.cross3 (p43, p42)));
+    const n1 = math.cross3 (p12, p13);
+    const n2 = math.cross3 (p43, p42);
 
-    const v1 = try add_map_vertex(mesh, x, y, h1, n1);
-    const v2 = try add_map_vertex(mesh, x + s, y, h2, n1);
-    const v3 = try add_map_vertex(mesh, x, y + s, h3, n1);
+    const n = math.vecToArr3 (math.normalize3 (n1+n2));
 
-    const v4 = try add_map_vertex(mesh, x + s, y, h2, n2);
-    const v5 = try add_map_vertex(mesh, x, y + s, h3, n2);
-    const v6 = try add_map_vertex(mesh, x + s, y + s, h4, n2);
+    if (h1 - h3 > h2 - h4)
+    {
+        const v1 = try add_map_vertex(mesh, x, y, h1, n);
+        const v2 = try add_map_vertex(mesh, x + s, y, h2, n);
+        const v3 = try add_map_vertex(mesh, x, y + s, h3, n);
 
-    try mesh.addIndex(v1);
-    try mesh.addIndex(v2);
-    try mesh.addIndex(v3);
+        const v4 = try add_map_vertex(mesh, x + s, y, h2, n);
+        const v5 = try add_map_vertex(mesh, x, y + s, h3, n);
+        const v6 = try add_map_vertex(mesh, x + s, y + s, h4, n);
 
-    try mesh.addIndex(v4);
-    try mesh.addIndex(v5);
-    try mesh.addIndex(v6);
+        try mesh.addIndex(v1);
+        try mesh.addIndex(v2);
+        try mesh.addIndex(v3);
+
+        try mesh.addIndex(v4);
+        try mesh.addIndex(v5);
+        try mesh.addIndex(v6);
+    }
+    else
+    {
+        const v1 = try add_map_vertex(mesh, x, y, h1, n);
+        const v2 = try add_map_vertex(mesh, x, y + s, h3, n);
+        const v3 = try add_map_vertex(mesh, x + s, y + s, h4, n);
+
+        const v4 = try add_map_vertex(mesh, x, y, h1, n);
+        const v5 = try add_map_vertex(mesh, x + s, y, h2, n);
+        const v6 = try add_map_vertex(mesh, x + s, y + s, h4, n);
+
+        try mesh.addIndex(v1);
+        try mesh.addIndex(v2);
+        try mesh.addIndex(v3);
+
+        try mesh.addIndex(v4);
+        try mesh.addIndex(v5);
+        try mesh.addIndex(v6);
+    }
 
     return (h1 == h2 and h2 == h3 and h3 == h4);
 }
@@ -1204,9 +1232,9 @@ fn create_mesh_quad(mesh: *TerrainMesh, x: f32, y: f32, s: f32) !bool {
 fn add_map_vertex(mesh: *TerrainMesh, x: f32, y: f32, z: f32, normal: [3]f32) !u32 {
     // TODO: change color depending on normal
 
-    const r = 0.0;
-    const g = 1.0 - normal[2] / 2;
-    const b = 0.0;
+    const r = 0.5;
+    const g = 1.0;
+    const b = 0.5;
     return try mesh.addVertex(.{
         .position = .{ .x = x, .y = y, .z = z },
         .color = .{ .r = r, .g = g, .b = b },
