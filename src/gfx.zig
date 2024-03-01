@@ -453,9 +453,7 @@ pub const Shader = struct {
         const location = gl.getUniformLocation(self.id, name);
         if (location == -1) {
             // std.debug.print("Unknown uniform {s} in {s}\n", .{ name, self.label });
-        }
-        else
-        {
+        } else {
             gl.uniform1f(location, value);
         }
     }
@@ -466,9 +464,7 @@ pub const Shader = struct {
         const location = gl.getUniformLocation(self.id, name);
         if (location == -1) {
             // std.debug.print("Unknown uniform {s} in {s}\n", .{ name, self.label });
-        }
-        else
-        {
+        } else {
             gl.uniform3f(location, value[0], value[1], value[2]);
         }
     }
@@ -479,9 +475,7 @@ pub const Shader = struct {
         const location = gl.getUniformLocation(self.id, name);
         if (location == -1) {
             // std.debug.print("Unknown uniform {s} is {s}\n", .{ name, self.label });
-        }
-        else
-        {
+        } else {
             gl.uniform4f(location, value[0], value[1], value[2], value[3]);
         }
     }
@@ -492,9 +486,7 @@ pub const Shader = struct {
         const location = gl.getUniformLocation(self.id, name);
         if (location == -1) {
             // std.debug.print("Unknown uniform {s} is {s}\n", .{ name, self.label });
-        }
-        else
-        {
+        } else {
             gl.uniformMatrix4fv(location, 1, gl.FALSE, math.arrNPtr(&value));
         }
     }

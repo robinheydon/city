@@ -3,6 +3,7 @@
     .version = "0.0.0",
     .dependencies = .{
         .system_sdk = .{ .path = "zig-gamedev/libs/system-sdk" },
+        .zflecs = .{ .path = "zig-gamedev/libs/zflecs" },
         .zglfw = .{ .path = "zig-gamedev/libs/zglfw" },
         .zgui = .{ .path = "zig-gamedev/libs/zgui" },
         .zmath = .{ .path = "zig-gamedev/libs/zmath" },

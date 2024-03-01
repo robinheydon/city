@@ -1,11 +1,12 @@
 const std = @import("std");
 
-const zglfw = @import ("zglfw");
-const zgui = @import ("zgui");
-const zmath = @import ("zmath");
-const zopengl = @import ("zopengl");
-const ztracy = @import ("ztracy");
-const zstbi = @import ("zstbi");
+const zflecs = @import("zflecs");
+const zglfw = @import("zglfw");
+const zgui = @import("zgui");
+const zmath = @import("zmath");
+const zopengl = @import("zopengl");
+const zstbi = @import("zstbi");
+const ztracy = @import("ztracy");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -18,28 +19,29 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const zglfw_pkg = zglfw.package (b, target, optimize, .{});
-    const zgui_pkg = zgui.package (b, target, optimize, .{
-            .options = .{
-                .backend = .glfw_opengl3,
-            },
-        }
-    );
-    const zmath_pkg = zmath.package (b, target, optimize, .{});
-    const zopengl_pkg = zopengl.package (b, target, optimize, .{});
-    const zstbi_pkg = zstbi.package (b, target, optimize, .{});
-    const ztracy_pkg = ztracy.package (b, target, optimize, .{
+    const zflecs_pkg = zflecs.package(b, target, optimize, .{});
+    const zglfw_pkg = zglfw.package(b, target, optimize, .{});
+    const zgui_pkg = zgui.package(b, target, optimize, .{
+        .options = .{
+            .backend = .glfw_opengl3,
+        },
+    });
+    const zmath_pkg = zmath.package(b, target, optimize, .{});
+    const zopengl_pkg = zopengl.package(b, target, optimize, .{});
+    const zstbi_pkg = zstbi.package(b, target, optimize, .{});
+    const ztracy_pkg = ztracy.package(b, target, optimize, .{
         .options = .{
             .enable_ztracy = false,
         },
     });
 
-    zglfw_pkg.link (exe);
-    zgui_pkg.link (exe);
-    zmath_pkg.link (exe);
-    zopengl_pkg.link (exe);
-    zstbi_pkg.link (exe);
-    ztracy_pkg.link (exe);
+    zflecs_pkg.link(exe);
+    zglfw_pkg.link(exe);
+    zgui_pkg.link(exe);
+    zmath_pkg.link(exe);
+    zopengl_pkg.link(exe);
+    zstbi_pkg.link(exe);
+    ztracy_pkg.link(exe);
 
     b.installArtifact(exe);
 

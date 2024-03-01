@@ -16,7 +16,7 @@ out vec3 vtx_pos;
 void main ()
 {
     gl_Position = projection * view * model * vec4 (position, 1.0);
-    float sun_angle = 0.5 + dot (sun_direction, normal) * 0.5;
+    float sun_angle = 0.5 + clamp (dot (sun_direction, normal), 0, 1) * 0.5;
     vtx_color = color * sun_angle;
     vtx_pos = position;
 }
