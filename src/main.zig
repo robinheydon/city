@@ -309,12 +309,6 @@ fn init_height_map() !void {
             }
         }
     }
-
-    // mark the centre of the map
-    state.height_map[2047][2047] = 100;
-    state.height_map[2047][2048] = 100;
-    state.height_map[2048][2047] = 100;
-    state.height_map[2048][2048] = 100;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -1161,26 +1155,24 @@ fn create_mesh_quad(mesh: *TerrainMesh, x: f32, y: f32, s: f32) !bool {
     const p43 = p3 - p4;
     const p42 = p2 - p4;
 
-    const n1 = math.cross3 (p12, p13);
-    const n2 = math.cross3 (p43, p42);
+    const n1 = math.vecToArr3 (math.normalize3 (math.cross3 (p12, p13)));
+    const n2 = math.vecToArr3 (math.normalize3 (math.cross3 (p43, p42)));
 
-    const n3 = n1 + n2;
-    const normal = math.vecToArr3 (math.normalize3 (n3));
-    // const normal = math.vecToArr3 (math.normalize3 (n1));
+    const v1 = try add_map_vertex(mesh, x, y, h1, n1);
+    const v2 = try add_map_vertex(mesh, x + s, y, h2, n1);
+    const v3 = try add_map_vertex(mesh, x, y + s, h3, n1);
 
-    const v1 = try add_map_vertex(mesh, x, y, h1, normal);
-    const v2 = try add_map_vertex(mesh, x + s, y, h2, normal);
-    const v3 = try add_map_vertex(mesh, x, y + s, h3, normal);
-    const v4 = try add_map_vertex(mesh, x + s, y + s, h4, normal);
-
-    // TODO: hinge the quad in a 'reasonable' way
+    const v4 = try add_map_vertex(mesh, x + s, y, h2, n2);
+    const v5 = try add_map_vertex(mesh, x, y + s, h3, n2);
+    const v6 = try add_map_vertex(mesh, x + s, y + s, h4, n2);
 
     try mesh.addIndex(v1);
     try mesh.addIndex(v2);
     try mesh.addIndex(v3);
-    try mesh.addIndex(v2);
+
     try mesh.addIndex(v4);
-    try mesh.addIndex(v3);
+    try mesh.addIndex(v5);
+    try mesh.addIndex(v6);
 
     return (h1 == h2 and h2 == h3 and h3 == h4);
 }
@@ -1190,25 +1182,16 @@ fn create_mesh_quad(mesh: *TerrainMesh, x: f32, y: f32, s: f32) !bool {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn add_map_vertex(mesh: *TerrainMesh, x: f32, y: f32, z: f32, normal: [3]f32) !u32 {
-    if (z == 0) {
-        const r = 0;
-        const g = 0;
-        const b = 1;
-        return try mesh.addVertex(.{
-            .position = .{ .x = x, .y = y, .z = z },
-            .color = .{ .r = r, .g = g, .b = b },
-            .normal = .{ .x = normal[0], .y = normal[1], .z = normal[2] },
-        });
-    } else {
-        const r = 0.2;
-        const g = 0.7;
-        const b = 0.3;
-        return try mesh.addVertex(.{
-            .position = .{ .x = x, .y = y, .z = z },
-            .color = .{ .r = r, .g = g, .b = b },
-            .normal = .{ .x = normal[0], .y = normal[1], .z = normal[2] },
-        });
-    }
+    // TODO: change color depending on normal
+
+    const r = 0.5 - normal[2] / 2;
+    const g = 0.7 - normal[2] / 2;
+    const b = 0.5 - normal[2] / 2;
+    return try mesh.addVertex(.{
+        .position = .{ .x = x, .y = y, .z = z },
+        .color = .{ .r = r, .g = g, .b = b },
+        .normal = .{ .x = normal[0], .y = normal[1], .z = normal[2] },
+    });
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
