@@ -148,7 +148,7 @@ fn create_terrain_mesh() !void {
     const index = root.state.terrain_frame_index +% 1;
 
     if (root.state.terrain_mesh[index]) |*mesh| {
-        const max_lod = 6;
+        const max_lod = 7;
         const grid_size: f32 = @floatFromInt(16 << max_lod);
 
         const lod_size: i32 = @intFromFloat(64 * 1024 / grid_size);
@@ -168,7 +168,6 @@ fn create_terrain_mesh() !void {
 
             const bx: f32 = std.math.clamp(root.state.main_camera.target[0], 0, root.max_map_x);
             const by: f32 = std.math.clamp(root.state.main_camera.target[1], 0, root.max_map_y);
-            const bz: f32 = root.state.main_camera.target[2];
 
             for (0..lod_size) |iy| {
                 for (0..lod_size) |ix| {
@@ -180,20 +179,10 @@ fn create_terrain_mesh() !void {
                             const cx = @as(f32, @floatFromInt(ix)) * grid_size + x_offset;
                             const cy = @as(f32, @floatFromInt(iy)) * grid_size + y_offset;
 
-                            const dx = ax - cx;
-                            const dy = ay - cy;
-                            const dist_a = @sqrt(dx * dx + dy * dy + az * az);
+                            const dx = (ax + bx) / 2 - cx;
+                            const dy = (ay + by) / 2 - cy;
 
-                            const ex = bx - cx;
-                            const ey = by - cy;
-                            const dist_b = @sqrt(ex * ex + ey * ey + bz * bz);
-
-                            if (dist_a < distance) {
-                                distance = dist_a;
-                            }
-                            if (dist_b < distance) {
-                                distance = dist_b;
-                            }
+                            distance = @sqrt(dx * dx + dy * dy + az * az);
                         }
                     }
 
