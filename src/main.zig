@@ -91,6 +91,8 @@ pub const State = struct {
     terrain_frame_index: u1 = 0,
     terrain_mesh: [2]?TerrainMesh = .{ null, null },
 
+    sea_level: f32 = 0,
+
     sun_angle: f32 = 45,
     sun_direction: f32 = 0,
 
@@ -171,7 +173,7 @@ pub fn main() !void {
     gl.debugMessageCallback(opengl_debug_message, null);
     gl.enable(gl.DEBUG_OUTPUT);
 
-    glfw.swapInterval(1);
+    glfw.swapInterval(2);
 
     gl.clearColor(0.4, 0.4, 0.4, 1.0);
     gl.clearDepth(1.0);
@@ -208,6 +210,7 @@ pub fn main() !void {
     gl.frontFace(gl.CW);
     gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.DEPTH_TEST);
+    gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
 
     state.fade_to_color[0] = 0.35;
     state.fade_to_color[1] = 0.35;
@@ -357,7 +360,7 @@ fn update_camera() void {
         }
 
         if (moving) {
-            state.yaw_velocity = @min(90, state.yaw_velocity + 30 * state.delta_time);
+            state.yaw_velocity = @min(45, state.yaw_velocity + 15 * state.delta_time);
         } else {
             state.yaw_velocity = 0;
         }
@@ -505,7 +508,7 @@ fn draw_debug() void {
             if (gui.treeNode("Terrain")) {
                 _ = gui.sliderFloat("Terrain", .{
                     .v = &state.user_terrain_detail,
-                    .min = 0.2,
+                    .min = 0.1,
                     .max = 1.0,
                     .cfmt = "%.2f",
                     .flags = .{
@@ -528,6 +531,16 @@ fn draw_debug() void {
                     .min = 0.0,
                     .max = 1.0,
                     .cfmt = "%.2f",
+                    .flags = .{
+                        .always_clamp = true,
+                        .no_input = true,
+                    },
+                });
+                _ = gui.sliderFloat("SeaLevel", .{
+                    .v = &state.sea_level,
+                    .min = 0.1,
+                    .max = 100.0,
+                    .cfmt = "%.0f",
                     .flags = .{
                         .always_clamp = true,
                         .no_input = true,
@@ -845,6 +858,46 @@ fn create_axes() !void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
+fn create_sea () !void
+{
+    state.sea_mesh = try Mesh.init(state.allocator, .triangles);
+    errdefer state.sea_mesh.deinit();
+
+    {
+        const v1 = try state.sea_mesh.addVertex(.{
+            .position = .{ .x = 0, .y = 0, .z = 9 },
+            .color = .{ .r = 0, .g = 0, .b = 1 },
+            .normal = .{ .x = 0, .y = 0, .z = 1 },
+        });
+        const v2 = try state.sea_mesh.addVertex(.{
+            .position = .{ .x = max_map_x, .y = 0, .z = 9 },
+            .color = .{ .r = 0, .g = 0, .b = 0 },
+            .normal = .{ .x = 0, .y = 0, .z = 1 },
+        });
+        const v3 = try state.sea_mesh.addVertex(.{
+            .position = .{ .x = 0, .y = max_map_y, .z = 9 },
+            .color = .{ .r = 0, .g = 0, .b = 1 },
+            .normal = .{ .x = 0, .y = 0, .z = 1 },
+        });
+        const v4 = try state.sea_mesh.addVertex(.{
+            .position = .{ .x = max_map_x, .y = max_map_y, .z = 9 },
+            .color = .{ .r = 0, .g = 0, .b = 1 },
+            .normal = .{ .x = 0, .y = 0, .z = 1 },
+        });
+
+        try state.sea_mesh.addIndex(v1);
+        try state.sea_mesh.addIndex(v2);
+        try state.sea_mesh.addIndex(v3);
+        try state.sea_mesh.addIndex(v2);
+        try state.sea_mesh.addIndex(v4);
+        try state.sea_mesh.addIndex(v3);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
 fn begin_3d() void {
     const zone = tracy.ZoneNC(@src(), "begin_3d", 0x00_ff_00_00);
     defer zone.End();
@@ -874,7 +927,7 @@ fn begin_3d() void {
     const aspect = width / height;
 
     const near: f32 = 1;
-    const far: f32 = 16000;
+    const far: f32 = 32000;
 
     const projection = math.perspectiveFovLhGl(std.math.pi / 3.0, aspect, near, far);
 
@@ -956,23 +1009,18 @@ fn draw_terrain() void {
     state.terrain_shader.use();
     defer state.terrain_shader.end();
 
-    // show the terrain from the bottom - just in case somebody goes underground
-    gl.disable(gl.CULL_FACE);
-
     // var number_mesh_loaded : usize = 0;
 
     if (state.terrain_mesh[state.terrain_frame_index]) |*grid| {
         if (state.show_wireframe) {
             gl.polygonMode(gl.FRONT_AND_BACK, gl.LINE);
             grid.render();
-        } else {
             gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
+        } else {
             grid.render();
         }
     }
 
-    gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
-    gl.enable(gl.CULL_FACE);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

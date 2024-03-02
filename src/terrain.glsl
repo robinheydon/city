@@ -35,24 +35,30 @@ in vec3 vtx_pos;
 void main ()
 {
     float dist = distance (camera, vtx_pos);
-    float opacity = clamp (dist / 16000, 0, 1);
+    float opacity = clamp (dist / 32000, 0, 1);
+    float visibility = 1 - opacity;
 
-    vec3 f1 = fract (vtx_pos / 10.0);
-    vec3 df1 = fwidth (vtx_pos / 10.0);
+    vec3 f1 = fract (vtx_pos / 20.0);
+    vec3 df1 = fwidth (vtx_pos / 20.0);
     vec3 g1 = smoothstep (-3*df1, 3*df1, f1);
 
     vec3 f2 = fract (vtx_pos / 100.0);
     vec3 df2 = fwidth (vtx_pos / 100.0);
     vec3 g2 = smoothstep (-4*df2, 4*df2, f2);
 
-    vec3 f3 = fract (vtx_pos / 16.0);
-    vec3 df3 = fwidth (vtx_pos / 16.0);
+    vec3 f3 = fract (vtx_pos / 100.0);
+    vec3 df3 = fwidth (vtx_pos / 100.0);
     vec3 g3 = smoothstep (-2*df3, 2*df3, f3);
 
-    float con = max (1-show_contour, g1.z * g2.z);
-    float grid = max (1-show_grid, g3.x * g3.y);
+    vec3 f4 = fract (vtx_pos / 1000.0);
+    vec3 df4 = fwidth (vtx_pos / 1000.0);
+    vec3 g4 = smoothstep (-5*df4, 5*df4, f4);
 
-    vec4 col = vec4 (vtx_color * con * grid, 1);
+    float con = max (1-(show_contour*visibility), g1.z * g1.z * g1.z * g2.z * g2.z);
+    float minor_grid = max (1-(show_grid*visibility*visibility), g3.x * g3.y * g3.x * g3.y);
+    float major_grid = max (1-(show_grid*visibility), g4.x * g4.y);
+
+    vec4 col = vec4 (vtx_color * con * minor_grid * major_grid, 1);
 
     FragColor = mix (col, vec4 (0.4, 0.4, 0.4, 1), opacity);
 }

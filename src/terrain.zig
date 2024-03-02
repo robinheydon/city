@@ -23,7 +23,7 @@ const rand = random.rand;
 
 pub const cell_size = 16;
 
-pub const max_tris = 500_000;
+pub const max_tris = 1_000_000;
 pub const max_vertex_capacity = 3 * max_tris; // six points per quad: three per tri
 pub const max_index_capacity = 3 * max_tris; // six indexes per quad: three per tri
 
@@ -73,6 +73,7 @@ fn terrain_thread() void {
     var last_camera_target_x: f32 = 0;
     var last_camera_target_y: f32 = 0;
     var last_user_terrain_detail: f32 = 0;
+    var last_sea_level: f32 = 0;
     var idle_count: usize = 0;
 
     while (root.state.running) {
@@ -100,6 +101,10 @@ fn terrain_thread() void {
             }
             if (last_user_terrain_detail != root.state.user_terrain_detail) {
                 last_user_terrain_detail = root.state.user_terrain_detail;
+                dirty = true;
+            }
+            if (last_sea_level != root.state.sea_level) {
+                last_sea_level = root.state.sea_level;
                 dirty = true;
             }
 
@@ -143,7 +148,7 @@ fn create_terrain_mesh() !void {
     const index = root.state.terrain_frame_index +% 1;
 
     if (root.state.terrain_mesh[index]) |*mesh| {
-        const max_lod = 4;
+        const max_lod = 6;
         const grid_size: f32 = @floatFromInt(16 << max_lod);
 
         const lod_size: i32 = @intFromFloat(64 * 1024 / grid_size);
@@ -159,9 +164,11 @@ fn create_terrain_mesh() !void {
 
             const ax: f32 = std.math.clamp(root.state.main_camera.position[0], 0, root.max_map_x);
             const ay: f32 = std.math.clamp(root.state.main_camera.position[1], 0, root.max_map_y);
+            const az: f32 = root.state.main_camera.position[2];
 
             const bx: f32 = std.math.clamp(root.state.main_camera.target[0], 0, root.max_map_x);
             const by: f32 = std.math.clamp(root.state.main_camera.target[1], 0, root.max_map_y);
+            const bz: f32 = root.state.main_camera.target[2];
 
             for (0..lod_size) |iy| {
                 for (0..lod_size) |ix| {
@@ -175,11 +182,11 @@ fn create_terrain_mesh() !void {
 
                             const dx = ax - cx;
                             const dy = ay - cy;
-                            const dist_a = @sqrt(dx * dx + dy * dy);
+                            const dist_a = @sqrt(dx * dx + dy * dy + az * az);
 
                             const ex = bx - cx;
                             const ey = by - cy;
-                            const dist_b = @sqrt(ex * ex + ey * ey);
+                            const dist_b = @sqrt(ex * ex + ey * ey + bz * bz);
 
                             if (dist_a < distance) {
                                 distance = dist_a;
@@ -192,8 +199,13 @@ fn create_terrain_mesh() !void {
 
                     var test_grid_size: f32 = 16;
                     var lod: i8 = max_lod;
+                    if (root.state.user_terrain_detail <= 0.25) {
+                        lod -= 2;
+                    } else if (root.state.user_terrain_detail <= 0.5) {
+                        lod -= 1;
+                    }
                     while (test_grid_size <= grid_size) : (test_grid_size *= 2) {
-                        if (distance > 16 * 1024 or distance > 48 * 1024 * root.state.user_terrain_detail) {
+                        if (distance > 32 * 1024 or distance > 96 * 1024 * root.state.user_terrain_detail) {
                             grid_lod[iy][ix] = -1;
                             break;
                         } else if (distance < test_grid_size * root.state.terrain_detail) {
@@ -257,8 +269,8 @@ fn create_terrain_mesh() !void {
                 break;
             }
 
-            root.state.terrain_detail = @max(1, @min(100, root.state.terrain_detail));
-            if (root.state.terrain_detail == 1 or root.state.terrain_detail == 100) {
+            root.state.terrain_detail = @max(1, @min(400, root.state.terrain_detail));
+            if (root.state.terrain_detail == 1 or root.state.terrain_detail == 400) {
                 break;
             }
         }
@@ -339,14 +351,16 @@ fn create_mesh_quad(mesh: *root.TerrainMesh, x: f32, y: f32, s: f32) !bool {
 
     const n = math.vecToArr3(math.normalize3(n1 + n2));
 
-    if (h1 - h3 > h2 - h4) {
-        const v1 = try add_map_vertex(mesh, x, y, h1, n);
-        const v2 = try add_map_vertex(mesh, x + s, y, h2, n);
-        const v3 = try add_map_vertex(mesh, x, y + s, h3, n);
+    const flat = h1 == h2 and h2 == h3 and h3 == h4;
 
-        const v4 = try add_map_vertex(mesh, x + s, y, h2, n);
-        const v5 = try add_map_vertex(mesh, x, y + s, h3, n);
-        const v6 = try add_map_vertex(mesh, x + s, y + s, h4, n);
+    if (h1 - h3 > h2 - h4) {
+        const v1 = try add_map_vertex(mesh, x, y, h1, n, flat);
+        const v2 = try add_map_vertex(mesh, x + s, y, h2, n, flat);
+        const v3 = try add_map_vertex(mesh, x, y + s, h3, n, flat);
+
+        const v4 = try add_map_vertex(mesh, x, y + s, h3, n, flat);
+        const v5 = try add_map_vertex(mesh, x + s, y, h2, n, flat);
+        const v6 = try add_map_vertex(mesh, x + s, y + s, h4, n, flat);
 
         try mesh.addIndex(v1);
         try mesh.addIndex(v2);
@@ -356,13 +370,13 @@ fn create_mesh_quad(mesh: *root.TerrainMesh, x: f32, y: f32, s: f32) !bool {
         try mesh.addIndex(v5);
         try mesh.addIndex(v6);
     } else {
-        const v1 = try add_map_vertex(mesh, x, y, h1, n);
-        const v2 = try add_map_vertex(mesh, x, y + s, h3, n);
-        const v3 = try add_map_vertex(mesh, x + s, y + s, h4, n);
+        const v1 = try add_map_vertex(mesh, x, y, h1, n, flat);
+        const v2 = try add_map_vertex(mesh, x + s, y + s, h4, n, flat);
+        const v3 = try add_map_vertex(mesh, x, y + s, h3, n, flat);
 
-        const v4 = try add_map_vertex(mesh, x, y, h1, n);
-        const v5 = try add_map_vertex(mesh, x + s, y, h2, n);
-        const v6 = try add_map_vertex(mesh, x + s, y + s, h4, n);
+        const v4 = try add_map_vertex(mesh, x, y, h1, n, flat);
+        const v5 = try add_map_vertex(mesh, x + s, y, h2, n, flat);
+        const v6 = try add_map_vertex(mesh, x + s, y + s, h4, n, flat);
 
         try mesh.addIndex(v1);
         try mesh.addIndex(v2);
@@ -380,17 +394,29 @@ fn create_mesh_quad(mesh: *root.TerrainMesh, x: f32, y: f32, s: f32) !bool {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn add_map_vertex(mesh: *root.TerrainMesh, x: f32, y: f32, z: f32, normal: [3]f32) !u32 {
+fn add_map_vertex(mesh: *root.TerrainMesh, x: f32, y: f32, z: f32, normal: [3]f32, flat: bool) !u32 {
     // TODO: change color depending on normal
 
-    const r = 0.5;
-    const g = 1.0;
-    const b = 0.5;
-    return try mesh.addVertex(.{
-        .position = .{ .x = x, .y = y, .z = z },
-        .color = .{ .r = r, .g = g, .b = b },
-        .normal = .{ .x = normal[0], .y = normal[1], .z = normal[2] },
-    });
+    const r: f32 = 0.5;
+    const g: f32 = 1.0;
+    const b: f32 = 0.5;
+
+    if (flat)
+    {
+        return try mesh.addVertex(.{
+            .position = .{ .x = x, .y = y, .z = z },
+            .color = .{ .r = 0, .g = 0, .b = 1 },
+            .normal = .{ .x = 0, .y = 0, .z = 1 },
+        });
+    }
+    else
+    {
+        return try mesh.addVertex(.{
+            .position = .{ .x = x, .y = y, .z = z },
+            .color = .{ .r = r, .g = g, .b = b },
+            .normal = .{ .x = normal[0], .y = normal[1], .z = normal[2] },
+        });
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -440,7 +466,12 @@ pub fn get_point_elevation(x: f32, y: f32) f32 {
     const mx: usize = @max(0, @min(4096, hmx));
     const my: usize = @max(0, @min(4096, hmy));
 
-    return root.state.height_map[my][mx];
+    const h = root.state.height_map[my][mx];
+    // if (h <= root.state.sea_level) {
+        // return root.state.sea_level + 0.1;
+    // } else {
+        return h;
+    // }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -459,8 +490,11 @@ pub fn get_worst_elevation(x: f32, y: f32) f32 {
     const h4 = root.state.height_map[my + 1][mx + 1];
 
     const h = @max(@max(h1, h2), @max(h3, h4));
-
-    return h;
+    // if (h <= root.state.sea_level) {
+        // return root.state.sea_level + 0.1;
+    // } else {
+        return h;
+    // }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
