@@ -15,6 +15,7 @@ const fonts = @import("fonts.zig");
 const gfx = @import("gfx.zig");
 const random = @import("random.zig");
 const terrain = @import("terrain.zig");
+const new_terrain = @import("new_terrain.zig");
 const rand = random.rand;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -31,11 +32,11 @@ const Mesh = gfx.Mesh(gfx.Vertex);
 pub const max_map_x = 64 * 1024;
 pub const max_map_y = 64 * 1024;
 
-const default_map_x = 32 * 1024;
-const default_map_y = 32 * 1024;
-const default_camera_yaw = 0;
-const default_camera_pitch = 30;
-const default_camera_zoom = 1000;
+const default_map_x = 0; // 32 * 1024;
+const default_map_y = 0; // 32 * 1024;
+const default_camera_yaw = 225; // 0;
+const default_camera_pitch = 75; // 30;
+const default_camera_zoom = 100; // 1000;
 
 pub const State = struct {
     main_window: *glfw.Window = undefined,
@@ -45,7 +46,8 @@ pub const State = struct {
 
     show_debug: bool = false,
     show_fps: bool = true,
-    show_terrain: bool = true,
+    show_terrain: bool = false,
+    show_new_terrain: bool = true,
     show_axes: bool = false,
     show_wireframe: bool = false,
 
@@ -106,6 +108,7 @@ pub const State = struct {
 
     basic_shader: gfx.Shader = undefined,
     terrain_shader: gfx.Shader = undefined,
+    new_terrain_shader: gfx.Shader = undefined,
 
     fade_to_color: [3]f32 = undefined,
 
@@ -173,7 +176,7 @@ pub fn main() !void {
     gl.debugMessageCallback(opengl_debug_message, null);
     gl.enable(gl.DEBUG_OUTPUT);
 
-    glfw.swapInterval(2);
+    glfw.swapInterval(1);
 
     gl.clearColor(0.4, 0.4, 0.4, 1.0);
     gl.clearDepth(1.0);
@@ -201,6 +204,9 @@ pub fn main() !void {
     state.camera_zoom = default_camera_zoom;
 
     try create_shaders();
+
+    try new_terrain.init ();
+    defer new_terrain.deinit ();
 
     try create_axes();
     defer state.axes.deinit();
@@ -256,6 +262,7 @@ pub fn main() !void {
 
         draw_axes();
         draw_terrain();
+        draw_new_terrain();
 
         draw_gui();
         draw_frame_times();
@@ -608,14 +615,19 @@ fn draw_fps() void {
             },
         })) {
             gui.text("fps: {d:0.0} / {d:0.1} ms", .{ state.fps, state.delta_time * 1000 });
-            if (state.terrain_mesh[state.terrain_frame_index]) |mesh| {
-                const tris = mesh.indexes.items.len / 3;
-                const ratio: f32 = @as(f32, @floatFromInt(tris)) / (state.user_terrain_detail * state.target_terrain_tris);
-                gui.text("terrain: {d} tris {d:0.1} {d:0.1}%", .{
-                    tris,
-                    state.terrain_detail,
-                    ratio * 100,
-                });
+            if (state.show_terrain) {
+                if (state.terrain_mesh[state.terrain_frame_index]) |mesh| {
+                    const tris = mesh.indexes.items.len / 3;
+                    const ratio: f32 = @as(f32, @floatFromInt(tris)) / (state.user_terrain_detail * state.target_terrain_tris);
+                    gui.text("terrain: {d} tris {d:0.1} {d:0.1}%", .{
+                        tris,
+                        state.terrain_detail,
+                        ratio * 100,
+                    });
+                }
+            }
+            else if (state.show_new_terrain) {
+                gui.text("new_terrain:", .{});
             }
         }
         gui.end();
@@ -679,9 +691,11 @@ fn on_key(
     } else if (key == .F3 and action == .press and mod == 0) {
         state.show_terrain = !state.show_terrain;
     } else if (key == .F4 and action == .press and mod == 0) {
-        state.show_axes = !state.show_axes;
+        state.show_new_terrain = !state.show_new_terrain;
     } else if (key == .F5 and action == .press and mod == 0) {
         state.show_wireframe = !state.show_wireframe;
+    } else if (key == .F6 and action == .press and mod == 0) {
+        state.show_axes = !state.show_axes;
     }
 }
 
@@ -799,10 +813,12 @@ const TracyAllocator = struct {
 
 const shader_source = @embedFile("shader.glsl");
 const terrain_source = @embedFile("terrain.glsl");
+const new_terrain_source = @embedFile("new_terrain.glsl");
 
 fn create_shaders() !void {
     state.basic_shader = try gfx.Shader.init(state.allocator, "basic shader", shader_source);
     state.terrain_shader = try gfx.Shader.init(state.allocator, "terrain_shader", terrain_source);
+    state.new_terrain_shader = try gfx.Shader.init(state.allocator, "new_terrain_shader", new_terrain_source);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -816,22 +832,22 @@ fn create_axes() !void {
     {
         const v1 = try state.axes.addVertex(.{
             .position = .{ .x = -10000, .y = 0, .z = 0 },
-            .color = .{ .r = 1, .g = 1, .b = 0 },
+            .color = .{ .r = 1, .g = 0, .b = 1 },
             .normal = .{ .x = 0, .y = 0, .z = 0 },
         });
         const v2 = try state.axes.addVertex(.{
             .position = .{ .x = 10000, .y = 0, .z = 0 },
-            .color = .{ .r = 1, .g = 1, .b = 0 },
+            .color = .{ .r = 1, .g = 0, .b = 1 },
             .normal = .{ .x = 0, .y = 0, .z = 0 },
         });
         const v3 = try state.axes.addVertex(.{
             .position = .{ .x = 0, .y = -10000, .z = 0 },
-            .color = .{ .r = 1, .g = 0, .b = 1 },
+            .color = .{ .r = 1, .g = 1, .b = 0 },
             .normal = .{ .x = 0, .y = 0, .z = 0 },
         });
         const v4 = try state.axes.addVertex(.{
             .position = .{ .x = 0, .y = 10000, .z = 0 },
-            .color = .{ .r = 1, .g = 0, .b = 1 },
+            .color = .{ .r = 1, .g = 1, .b = 0 },
             .normal = .{ .x = 0, .y = 0, .z = 0 },
         });
         const v5 = try state.axes.addVertex(.{
@@ -964,6 +980,16 @@ fn begin_3d() void {
     state.terrain_shader.setUniformMat("view", view);
     state.terrain_shader.setUniformMat("projection", projection);
     state.terrain_shader.end();
+
+    state.new_terrain_shader.use();
+    state.new_terrain_shader.setUniform3f("camera", camera_position);
+    state.new_terrain_shader.setUniform3f("sun_direction", sun_direction);
+    state.new_terrain_shader.setUniform1f("show_contour", state.show_contour);
+    state.new_terrain_shader.setUniform1f("show_grid", state.show_grid);
+    state.new_terrain_shader.setUniformMat("model", model);
+    state.new_terrain_shader.setUniformMat("view", view);
+    state.new_terrain_shader.setUniformMat("projection", projection);
+    state.new_terrain_shader.end();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -1020,7 +1046,30 @@ fn draw_terrain() void {
             grid.render();
         }
     }
+}
 
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+fn draw_new_terrain() void {
+    const zone = tracy.ZoneNC(@src(), "draw_terrain", 0x00_ff_00_00);
+    defer zone.End();
+
+    if (!state.show_new_terrain) {
+        return;
+    }
+
+    state.new_terrain_shader.use();
+    defer state.new_terrain_shader.end();
+
+    if (state.show_wireframe) {
+        gl.polygonMode(gl.FRONT_AND_BACK, gl.LINE);
+        new_terrain.render();
+        gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
+    } else {
+        new_terrain.render();
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
