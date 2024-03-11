@@ -29,9 +29,6 @@ const Mesh = gfx.Mesh(gfx.Vertex);
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-pub const max_map_x = 64 * 1024;
-pub const max_map_y = 64 * 1024;
-
 const default_map_x = 32 * 1024;
 const default_map_y = 32 * 1024;
 const default_camera_yaw = 0;
@@ -81,8 +78,8 @@ pub const State = struct {
     width: i32 = undefined,
     height: i32 = undefined,
 
-    height_map: [max_map_y / terrain.cell_size + 1][max_map_x / terrain.cell_size + 1]f32 = undefined,
-    flat_map: [max_map_y / terrain.cell_size + 1][max_map_x / terrain.cell_size + 1]u8 = undefined,
+    height_map: [terrain.max_map_y / terrain.cell_size + 1][terrain.max_map_x / terrain.cell_size + 1]f32 = undefined,
+    flat_map: [terrain.max_map_y / terrain.cell_size + 1][terrain.max_map_x / terrain.cell_size + 1]u8 = undefined,
 
     terrain_generation_requested: bool = false,
     terrain_generation_ready: bool = false,
@@ -453,8 +450,8 @@ fn update_camera() void {
         }
     }
 
-    state.target_x = @min(max_map_x, @max(0, state.target_x));
-    state.target_y = @min(max_map_y, @max(0, state.target_y));
+    state.target_x = @min(terrain.max_map_x, @max(0, state.target_x));
+    state.target_y = @min(terrain.max_map_y, @max(0, state.target_y));
 
     const target_z = terrain.get_worst_elevation(state.target_x, state.target_y) + 4;
 
@@ -879,17 +876,17 @@ fn create_sea () !void
             .normal = .{ .x = 0, .y = 0, .z = 1 },
         });
         const v2 = try state.sea_mesh.addVertex(.{
-            .position = .{ .x = max_map_x, .y = 0, .z = 9 },
+            .position = .{ .x = terrain.max_map_x, .y = 0, .z = 9 },
             .color = .{ .r = 0, .g = 0, .b = 0 },
             .normal = .{ .x = 0, .y = 0, .z = 1 },
         });
         const v3 = try state.sea_mesh.addVertex(.{
-            .position = .{ .x = 0, .y = max_map_y, .z = 9 },
+            .position = .{ .x = 0, .y = terrain.max_map_y, .z = 9 },
             .color = .{ .r = 0, .g = 0, .b = 1 },
             .normal = .{ .x = 0, .y = 0, .z = 1 },
         });
         const v4 = try state.sea_mesh.addVertex(.{
-            .position = .{ .x = max_map_x, .y = max_map_y, .z = 9 },
+            .position = .{ .x = terrain.max_map_x, .y = terrain.max_map_y, .z = 9 },
             .color = .{ .r = 0, .g = 0, .b = 1 },
             .normal = .{ .x = 0, .y = 0, .z = 1 },
         });

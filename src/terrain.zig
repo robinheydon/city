@@ -21,6 +21,9 @@ const rand = random.rand;
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
+pub const max_map_x = 64 * 1024;
+pub const max_map_y = 64 * 1024;
+
 pub const cell_size = 8;
 
 pub const max_tris = 1_000_000;
@@ -162,16 +165,16 @@ fn create_terrain_mesh() !void {
                 }
             }
 
-            const ax: f32 = std.math.clamp(root.state.main_camera.position[0], 0, root.max_map_x);
-            const ay: f32 = std.math.clamp(root.state.main_camera.position[1], 0, root.max_map_y);
+            const ax: f32 = std.math.clamp(root.state.main_camera.position[0], 0, max_map_x);
+            const ay: f32 = std.math.clamp(root.state.main_camera.position[1], 0, max_map_y);
             const az: f32 = root.state.main_camera.position[2];
 
-            const bx: f32 = std.math.clamp(root.state.main_camera.target[0], 0, root.max_map_x);
-            const by: f32 = std.math.clamp(root.state.main_camera.target[1], 0, root.max_map_y);
+            const bx: f32 = std.math.clamp(root.state.main_camera.target[0], 0, max_map_x);
+            const by: f32 = std.math.clamp(root.state.main_camera.target[1], 0, max_map_y);
 
             for (0..lod_size) |iy| {
                 for (0..lod_size) |ix| {
-                    var distance: f32 = @max(root.max_map_x, root.max_map_y);
+                    var distance: f32 = @max(max_map_x, max_map_y);
                     for (0..3) |gy| {
                         for (0..3) |gx| {
                             const x_offset = @as(f32, @floatFromInt(gx)) * grid_size / 2;
@@ -416,8 +419,8 @@ pub fn init_height_map() !void {
     var map = try stbi.Image.loadFromFile("media/16mgrid.png", 1);
     defer map.deinit();
 
-    for (0..root.max_map_x / cell_size + 1) |y| {
-        for (0..root.max_map_y / cell_size + 1) |x| {
+    for (0..max_map_x / cell_size + 1) |y| {
+        for (0..max_map_y / cell_size + 1) |x| {
             root.state.height_map[y][x] = 0;
         }
     }
@@ -426,13 +429,13 @@ pub fn init_height_map() !void {
     map_data.ptr = @alignCast(@ptrCast(map.data.ptr));
     map_data.len = map.data.len / 2;
 
-    for (0..root.max_map_x / cell_size + 1) |y| {
-        for (0..root.max_map_x / cell_size + 1) |x| {
+    for (0..max_map_x / cell_size + 1) |y| {
+        for (0..max_map_x / cell_size + 1) |x| {
             if (x < map.width and y < map.height) {
                 const height: f32 = @as(f32, @floatFromInt(map_data[y * map.width + x])) / 60;
                 root.state.height_map[y][x] = height;
             } else {
-                root.state.height_map[y][x] = 0;
+                root.state.height_map[y][x] = rand (f32) * 30 + 10;
             }
         }
     }
@@ -445,8 +448,8 @@ pub fn init_height_map() !void {
 pub fn get_point_elevation(x: f32, y: f32) f32 {
     const hmx: i32 = @intFromFloat(x / cell_size);
     const hmy: i32 = @intFromFloat(y / cell_size);
-    const mx: usize = @max(0, @min(4096, hmx));
-    const my: usize = @max(0, @min(4096, hmy));
+    const mx: usize = @max(0, @min(max_map_x / cell_size, hmx));
+    const my: usize = @max(0, @min(max_map_y / cell_size, hmy));
 
     const h = root.state.height_map[my][mx];
     // if (h <= root.state.sea_level) {
@@ -463,7 +466,7 @@ pub fn get_point_elevation(x: f32, y: f32) f32 {
 pub fn get_worst_elevation(x: f32, y: f32) f32 {
     const hmx: i32 = @intFromFloat(x / cell_size);
     const hmy: i32 = @intFromFloat(y / cell_size);
-    const mx: usize = @max(0, @min(4095, hmx));
+    const mx: usize = @max(0, @min(max_map_x / cell_size, hmx));
     const my: usize = @max(0, @min(4095, hmy));
 
     const h1 = root.state.height_map[my][mx];
