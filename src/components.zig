@@ -64,7 +64,7 @@ const RouteRequest = struct {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 const Node = struct {
-    links: std.ArrayListUnmanaged (ecs.entity_t),
+    links: std.ArrayListUnmanaged(ecs.entity_t),
     priority_links: [2]ecs.entity_t,
 };
 
@@ -89,9 +89,9 @@ const Link = struct {
 const LinkLayout = struct {
     width: f32,
     speed_limit: f32,
-    lanes: std.ArrayListUnmanaged (LaneType),
-    lane_widths: std.ArrayListUnmanaged (LaneType),
-    restrictions: std.ArrayListUnmanaged (LaneRestriction),
+    lanes: std.ArrayListUnmanaged(LaneType),
+    lane_widths: std.ArrayListUnmanaged(LaneType),
+    restrictions: std.ArrayListUnmanaged(LaneRestriction),
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -120,14 +120,14 @@ const LaneType = enum {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-const LaneRestriction = packed struct (u8) {
-    no_general_traffic : bool = false,
-    no_autonomous : bool = false,
-    no_bus : bool = false,
-    no_taxi : bool = false,
-    no_hgv : bool = false,
-    no_emergency : bool = false,
-    no_parking : bool = false,
+const LaneRestriction = packed struct(u8) {
+    no_general_traffic: bool = false,
+    no_autonomous: bool = false,
+    no_bus: bool = false,
+    no_taxi: bool = false,
+    no_hgv: bool = false,
+    no_emergency: bool = false,
+    no_parking: bool = false,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -139,8 +139,8 @@ const Route = struct {
     elapsed: f32,
     source_offset: f32,
     destination_offset: f32,
-    nodes: std.ArrayListUnmanaged (Node),
-    links: std.ArrayListUnmanaged (Link),
+    nodes: std.ArrayListUnmanaged(Node),
+    links: std.ArrayListUnmanaged(Link),
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

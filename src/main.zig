@@ -17,7 +17,7 @@ const gfx = @import("gfx.zig");
 const random = @import("random.zig");
 const terrain = @import("terrain.zig");
 const rand = random.rand;
-const components = @import ("components.zig");
+const components = @import("components.zig");
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -141,8 +141,8 @@ pub fn main() !void {
 
     random.init();
 
-    state.world = ecs.init ();
-    defer _ = ecs.fini (state.world);
+    state.world = ecs.init();
+    defer _ = ecs.fini(state.world);
 
     stbi.init(state.allocator);
     defer stbi.deinit();
@@ -866,8 +866,7 @@ fn create_axes() !void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn create_sea () !void
-{
+fn create_sea() !void {
     state.sea_mesh = try Mesh.init(state.allocator, .triangles);
     errdefer state.sea_mesh.deinit();
 
