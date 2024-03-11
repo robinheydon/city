@@ -452,11 +452,11 @@ pub fn get_point_elevation(x: f32, y: f32) f32 {
     const my: usize = @max(0, @min(max_map_y / cell_size, hmy));
 
     const h = root.state.height_map[my][mx];
-    // if (h <= root.state.sea_level) {
-        // return root.state.sea_level + 0.1;
-    // } else {
+    if (h <= root.state.sea_level) {
+        return root.state.sea_level + 0.1;
+    } else {
         return h;
-    // }
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -466,8 +466,8 @@ pub fn get_point_elevation(x: f32, y: f32) f32 {
 pub fn get_worst_elevation(x: f32, y: f32) f32 {
     const hmx: i32 = @intFromFloat(x / cell_size);
     const hmy: i32 = @intFromFloat(y / cell_size);
-    const mx: usize = @max(0, @min(max_map_x / cell_size, hmx));
-    const my: usize = @max(0, @min(4095, hmy));
+    const mx: usize = @max(0, @min(max_map_x / cell_size - 1, hmx));
+    const my: usize = @max(0, @min(max_map_y / cell_size - 1, hmy));
 
     const h1 = root.state.height_map[my][mx];
     const h2 = root.state.height_map[my][mx + 1];
@@ -475,11 +475,11 @@ pub fn get_worst_elevation(x: f32, y: f32) f32 {
     const h4 = root.state.height_map[my + 1][mx + 1];
 
     const h = @max(@max(h1, h2), @max(h3, h4));
-    // if (h <= root.state.sea_level) {
-        // return root.state.sea_level + 0.1;
-    // } else {
+    if (h <= root.state.sea_level) {
+        return root.state.sea_level + 0.1;
+    } else {
         return h;
-    // }
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
