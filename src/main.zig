@@ -10,6 +10,7 @@ const gl = opengl.bindings;
 const math = @import("zmath");
 const tracy = @import("ztracy");
 const stbi = @import("zstbi");
+const ecs = @import("zflecs");
 
 const fonts = @import("fonts.zig");
 const gfx = @import("gfx.zig");
@@ -40,6 +41,8 @@ const default_camera_zoom = 1000;
 pub const State = struct {
     main_window: *glfw.Window = undefined,
     allocator: std.mem.Allocator = undefined,
+
+    world: *ecs.world_t = undefined,
 
     running: bool = true,
 
@@ -136,8 +139,12 @@ pub fn main() !void {
 
     std.debug.print("City\n", .{});
     std.debug.print("  cpus = {}\n", .{try std.Thread.getCpuCount()});
+    std.debug.print("  flecs = {s}\n", .{ecs.flecs_version});
 
     random.init();
+
+    state.world = ecs.init ();
+    defer _ = ecs.fini (state.world);
 
     stbi.init(state.allocator);
     defer stbi.deinit();
@@ -672,7 +679,7 @@ fn on_key(
 
     // std.debug.print("Key: {} {}\n", .{ key, state.gui_capture_keyboard });
 
-    if (key == .escape and action == .press and mod == 0) {
+    if (key == .escape and action == .press and mod == 3) {
         _ = window.setShouldClose(true);
     } else if (key == .F1 and action == .press and mod == 0) {
         state.show_debug = !state.show_debug;

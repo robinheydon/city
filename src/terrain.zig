@@ -21,7 +21,7 @@ const rand = random.rand;
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-pub const cell_size = 16;
+pub const cell_size = 8;
 
 pub const max_tris = 1_000_000;
 pub const max_vertex_capacity = 3 * max_tris; // six points per quad: three per tri
@@ -426,18 +426,11 @@ pub fn init_height_map() !void {
     map_data.ptr = @alignCast(@ptrCast(map.data.ptr));
     map_data.len = map.data.len / 2;
 
-    var max_height: f32 = 0;
-    var min_height: f32 = 65535;
-
     for (0..root.max_map_x / cell_size + 1) |y| {
         for (0..root.max_map_x / cell_size + 1) |x| {
             if (x < map.width and y < map.height) {
                 const height: f32 = @as(f32, @floatFromInt(map_data[y * map.width + x])) / 60;
                 root.state.height_map[y][x] = height;
-                max_height = @max(height, max_height);
-                if (height > 0) {
-                    min_height = @min(height, min_height);
-                }
             } else {
                 root.state.height_map[y][x] = 0;
             }
