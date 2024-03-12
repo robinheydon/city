@@ -202,7 +202,7 @@ pub fn main() !void {
 
     _ = ui.io.addFontFromMemory(fonts.atkinson_regular, 24);
 
-    gui.getStyle().scaleAllSizes(1);
+    ui.getStyle().scaleAllSizes(1);
 
     state.target_x = default_map_x;
     state.target_y = default_map_y;
