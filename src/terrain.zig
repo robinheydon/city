@@ -393,16 +393,13 @@ fn add_map_vertex(mesh: *root.TerrainMesh, x: f32, y: f32, z: f32, normal: [3]f3
     const g: f32 = 1.0;
     const b: f32 = 0.5;
 
-    if (flat)
-    {
+    if (flat) {
         return try mesh.addVertex(.{
             .position = .{ .x = x, .y = y, .z = z },
             .color = .{ .r = 0, .g = 0, .b = 1 },
             .normal = .{ .x = 0, .y = 0, .z = 1 },
         });
-    }
-    else
-    {
+    } else {
         return try mesh.addVertex(.{
             .position = .{ .x = x, .y = y, .z = z },
             .color = .{ .r = r, .g = g, .b = b },
@@ -435,7 +432,7 @@ pub fn init_height_map() !void {
                 const height: f32 = @as(f32, @floatFromInt(map_data[y * map.width + x])) / 60;
                 root.state.height_map[y][x] = height;
             } else {
-                root.state.height_map[y][x] = rand (f32) * 30 + 10;
+                root.state.height_map[y][x] = rand(f32) * 30 + 10;
             }
         }
     }
@@ -453,9 +450,9 @@ pub fn get_point_elevation(x: f32, y: f32) f32 {
 
     const h = root.state.height_map[my][mx];
     // if (h <= root.state.sea_level) {
-        // return root.state.sea_level + 0.1;
+    // return root.state.sea_level + 0.1;
     // } else {
-        return h;
+    return h;
     // }
 }
 
@@ -476,9 +473,9 @@ pub fn get_worst_elevation(x: f32, y: f32) f32 {
 
     const h = @max(@max(h1, h2), @max(h3, h4));
     // if (h <= root.state.sea_level) {
-        // return root.state.sea_level + 0.1;
+    // return root.state.sea_level + 0.1;
     // } else {
-        return h;
+    return h;
     // }
 }
 

@@ -10,13 +10,14 @@ const gl = opengl.bindings;
 const math = @import("zmath");
 const tracy = @import("ztracy");
 const stbi = @import("zstbi");
-const ecs = @import("zflecs");
 
 const fonts = @import("fonts.zig");
 const gfx = @import("gfx.zig");
 const random = @import("random.zig");
 const terrain = @import("terrain.zig");
 const rand = random.rand;
+const components = @import("components.zig");
+const ecs = @import("ecs.zig");
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -29,9 +30,9 @@ const Mesh = gfx.Mesh(gfx.Vertex);
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-const default_map_x = 32 * 1024;
-const default_map_y = 32 * 1024;
-const default_camera_yaw = 0;
+const default_map_x = 0; // 32 * 1024;
+const default_map_y = 0; // 32 * 1024;
+const default_camera_yaw = 30;
 const default_camera_pitch = 30;
 const default_camera_zoom = 1000;
 
@@ -39,14 +40,12 @@ pub const State = struct {
     main_window: *glfw.Window = undefined,
     allocator: std.mem.Allocator = undefined,
 
-    world: *ecs.world_t = undefined,
-
     running: bool = true,
 
     show_debug: bool = false,
     show_fps: bool = true,
     show_terrain: bool = true,
-    show_axes: bool = false,
+    show_axes: bool = true,
     show_wireframe: bool = false,
 
     gui_capture_mouse: bool = false,
@@ -132,16 +131,23 @@ pub fn main() !void {
     defer std.debug.assert(gpa.deinit() == .ok);
 
     var tracy_allocator = tracy.TracyAllocator{ .child_allocator = gpa.allocator() };
+
+    // var logging_allocator = std.heap.loggingAllocator (tracy_allocator.allocator ());
+
     state.allocator = tracy_allocator.allocator();
 
     std.debug.print("City\n", .{});
     std.debug.print("  cpus = {}\n", .{try std.Thread.getCpuCount()});
-    std.debug.print("  flecs = {s}\n", .{ecs.flecs_version});
+    std.debug.print("  ecs = {}\n", .{ecs.version});
 
     random.init();
 
-    state.world = ecs.init ();
-    defer _ = ecs.fini (state.world);
+    var world = try ecs.init(state.allocator);
+    defer world.deinit();
+
+    try world.register_components(components);
+    std.debug.print("{}\n", .{world});
+    std.process.exit(0);
 
     stbi.init(state.allocator);
     defer stbi.deinit();
@@ -196,7 +202,7 @@ pub fn main() !void {
 
     _ = gui.io.addFontFromMemory(fonts.atkinson_regular, 24);
 
-    gui.getStyle().scaleAllSizes(2);
+    gui.getStyle().scaleAllSizes(1);
 
     state.target_x = default_map_x;
     state.target_y = default_map_y;
@@ -271,7 +277,6 @@ pub fn main() !void {
         }
 
         process_events();
-
         update_camera();
     }
 }
@@ -282,6 +287,11 @@ pub fn main() !void {
 
 fn reset_delta_time() void {
     state.last_now = std.time.microTimestamp();
+    for (0..state.frame_times.len) |i| {
+        state.frame_times[i] = 0;
+    }
+    state.frame_time_index = 0;
+    state.frame_times_full = false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -864,8 +874,7 @@ fn create_axes() !void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn create_sea () !void
-{
+fn create_sea() !void {
     state.sea_mesh = try Mesh.init(state.allocator, .triangles);
     errdefer state.sea_mesh.deinit();
 
@@ -1090,6 +1099,14 @@ fn opengl_debug_message(
         std.debug.print("{s}\n", .{block});
         tracy.Message(block);
     }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+test "_" {
+    _ = @import("ecs.zig");
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
