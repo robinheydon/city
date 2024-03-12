@@ -4,7 +4,7 @@
 
 const std = @import("std");
 const glfw = @import("zglfw");
-const gui = @import("zgui");
+const ui = @import("zgui");
 const opengl = @import("zopengl");
 const gl = opengl.bindings;
 const math = @import("zmath");
@@ -48,9 +48,9 @@ pub const State = struct {
     show_axes: bool = true,
     show_wireframe: bool = false,
 
-    gui_capture_mouse: bool = false,
-    gui_capture_keyboard: bool = false,
-    gui_capture_text: bool = false,
+    ui_capture_mouse: bool = false,
+    ui_capture_keyboard: bool = false,
+    ui_capture_text: bool = false,
 
     frame_times: [8]i64 = undefined,
     frame_time_index: usize = 0,
@@ -194,13 +194,13 @@ pub fn main() !void {
     _ = state.main_window.setCharCallback(on_char);
     _ = state.main_window.setCursorPosCallback(on_mouse_move);
 
-    gui.init(state.allocator);
-    defer gui.deinit();
+    ui.init(state.allocator);
+    defer ui.deinit();
 
-    gui.backend.init(state.main_window);
-    defer gui.backend.deinit();
+    ui.backend.init(state.main_window);
+    defer ui.backend.deinit();
 
-    _ = gui.io.addFontFromMemory(fonts.atkinson_regular, 24);
+    _ = ui.io.addFontFromMemory(fonts.atkinson_regular, 24);
 
     gui.getStyle().scaleAllSizes(1);
 
@@ -267,7 +267,7 @@ pub fn main() !void {
         draw_axes();
         draw_terrain();
 
-        draw_gui();
+        draw_ui();
         draw_frame_times();
 
         {
@@ -342,7 +342,7 @@ fn update_camera() void {
         }
     };
 
-    if (!state.gui_capture_keyboard) {
+    if (!state.ui_capture_keyboard) {
         if (state.main_window.getKey(.t) == .press) {
             state.target_x = default_map_x;
             state.target_y = default_map_y;
@@ -352,7 +352,7 @@ fn update_camera() void {
         }
     }
 
-    if (!state.gui_capture_keyboard) {
+    if (!state.ui_capture_keyboard) {
         var moving = false;
 
         if (state.main_window.getKey(.q) == .press) {
@@ -380,7 +380,7 @@ fn update_camera() void {
         }
     }
 
-    if (!state.gui_capture_keyboard) {
+    if (!state.ui_capture_keyboard) {
         var moving = false;
 
         if (state.main_window.getKey(.f) == .press) {
@@ -400,7 +400,7 @@ fn update_camera() void {
         }
     }
 
-    if (!state.gui_capture_keyboard) {
+    if (!state.ui_capture_keyboard) {
         var moving = false;
         if (state.main_window.getKey(.z) == .press) {
             state.camera_zoom = @max(15, state.camera_zoom - fast_multiplier * state.zoom_velocity * state.delta_time);
@@ -428,7 +428,7 @@ fn update_camera() void {
     const sp: f32 = @floatCast(@sin(pitch));
     const cp: f32 = @floatCast(@cos(pitch));
 
-    if (!state.gui_capture_keyboard) {
+    if (!state.ui_capture_keyboard) {
         var moving = false;
         if (state.main_window.getKey(.w) == .press) {
             state.target_x -= fast_multiplier * sy * state.target_velocity * state.delta_time;
@@ -486,26 +486,27 @@ fn update_camera() void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn draw_gui() void {
-    const zone = tracy.ZoneNC(@src(), "draw_gui", 0x00_ff_00_00);
+fn draw_ui() void {
+    const zone = tracy.ZoneNC(@src(), "draw_ui", 0x00_ff_00_00);
     defer zone.End();
 
     {
-        const fb_zone = tracy.ZoneNC(@src(), "gui.backend.newFrame", 0x00800000);
+        const fb_zone = tracy.ZoneNC(@src(), "ui.backend.newFrame", 0x00800000);
         defer fb_zone.End();
 
-        gui.backend.newFrame(@intCast(state.width), @intCast(state.height));
+        ui.backend.newFrame(@intCast(state.width), @intCast(state.height));
     }
 
     draw_debug();
     draw_fps();
-    // gui.showDemoWindow (&state.user_demo_window);
+
+    // ui.showDemoWindow (&state.user_demo_window);
 
     {
-        const draw_zone = tracy.ZoneNC(@src(), "gui.backend.draw", 0x00800000);
+        const draw_zone = tracy.ZoneNC(@src(), "ui.backend.draw", 0x00800000);
         defer draw_zone.End();
 
-        gui.backend.draw();
+        ui.backend.draw();
     }
 }
 
@@ -518,9 +519,9 @@ fn draw_debug() void {
     defer zone.End();
 
     if (state.show_debug) {
-        if (gui.begin("Settings", .{})) {
-            if (gui.treeNode("Terrain")) {
-                _ = gui.sliderFloat("Terrain", .{
+        if (ui.begin("Settings", .{})) {
+            if (ui.treeNode("Terrain")) {
+                _ = ui.sliderFloat("Terrain", .{
                     .v = &state.user_terrain_detail,
                     .min = 0.1,
                     .max = 1.0,
@@ -530,7 +531,7 @@ fn draw_debug() void {
                         .no_input = true,
                     },
                 });
-                _ = gui.sliderFloat("Contour", .{
+                _ = ui.sliderFloat("Contour", .{
                     .v = &state.show_contour,
                     .min = 0.0,
                     .max = 1.0,
@@ -540,7 +541,7 @@ fn draw_debug() void {
                         .no_input = true,
                     },
                 });
-                _ = gui.sliderFloat("Grid", .{
+                _ = ui.sliderFloat("Grid", .{
                     .v = &state.show_grid,
                     .min = 0.0,
                     .max = 1.0,
@@ -550,7 +551,7 @@ fn draw_debug() void {
                         .no_input = true,
                     },
                 });
-                _ = gui.sliderFloat("SeaLevel", .{
+                _ = ui.sliderFloat("SeaLevel", .{
                     .v = &state.sea_level,
                     .min = 0.1,
                     .max = 100.0,
@@ -560,10 +561,10 @@ fn draw_debug() void {
                         .no_input = true,
                     },
                 });
-                gui.treePop();
+                ui.treePop();
             }
-            if (gui.treeNode("Sun")) {
-                _ = gui.sliderFloat("angle", .{
+            if (ui.treeNode("Sun")) {
+                _ = ui.sliderFloat("angle", .{
                     .v = &state.sun_angle,
                     .min = 0.0,
                     .max = 80.0,
@@ -573,7 +574,7 @@ fn draw_debug() void {
                         .no_input = true,
                     },
                 });
-                _ = gui.sliderFloat("direction", .{
+                _ = ui.sliderFloat("direction", .{
                     .v = &state.sun_direction,
                     .min = 0.0,
                     .max = 360.0,
@@ -583,10 +584,10 @@ fn draw_debug() void {
                         .no_input = true,
                     },
                 });
-                gui.treePop();
+                ui.treePop();
             }
         }
-        gui.end();
+        ui.end();
     }
 }
 
@@ -599,15 +600,15 @@ fn draw_fps() void {
     defer zone.End();
 
     if (state.show_fps) {
-        gui.setNextWindowSize(.{
+        ui.setNextWindowSize(.{
             .w = @floatFromInt(state.width),
             .h = @floatFromInt(state.height),
         });
-        gui.setNextWindowPos(.{
+        ui.setNextWindowPos(.{
             .x = 0,
             .y = 0,
         });
-        if (gui.begin("FPS", .{
+        if (ui.begin("FPS", .{
             .flags = .{
                 .no_title_bar = true,
                 .no_resize = true,
@@ -621,12 +622,12 @@ fn draw_fps() void {
                 .no_nav_focus = true,
             },
         })) {
-            gui.text("fps: {d:0.0} / {d:0.1} ms", .{ state.fps, state.delta_time * 1000 });
+            ui.text("fps: {d:0.0} / {d:0.1} ms", .{ state.fps, state.delta_time * 1000 });
             if (state.show_terrain) {
                 if (state.terrain_mesh[state.terrain_frame_index]) |mesh| {
                     const tris = mesh.indexes.items.len / 3;
                     const ratio: f32 = @as(f32, @floatFromInt(tris)) / (state.user_terrain_detail * state.target_terrain_tris);
-                    gui.text("terrain: {d} tris {d:0.1} {d:0.1}%", .{
+                    ui.text("terrain: {d} tris {d:0.1} {d:0.1}%", .{
                         tris,
                         state.terrain_detail,
                         ratio * 100,
@@ -634,7 +635,7 @@ fn draw_fps() void {
                 }
             }
         }
-        gui.end();
+        ui.end();
     }
 }
 
@@ -652,9 +653,9 @@ fn process_events() void {
     const events_zone = tracy.ZoneNC(@src(), "process_events", 0x00_ff_00_00);
     defer events_zone.End();
 
-    state.gui_capture_mouse = gui.io.getWantCaptureMouse();
-    state.gui_capture_keyboard = gui.io.getWantCaptureKeyboard();
-    state.gui_capture_text = gui.io.getWantTextInput();
+    state.ui_capture_mouse = ui.io.getWantCaptureMouse();
+    state.ui_capture_keyboard = ui.io.getWantCaptureKeyboard();
+    state.ui_capture_text = ui.io.getWantTextInput();
 
     glfw.pollEvents();
 }
@@ -675,7 +676,7 @@ fn on_key(
     const zone = tracy.ZoneNC(@src(), "on_key", 0x00_ff_00_00);
     defer zone.End();
 
-    if (state.gui_capture_keyboard) {
+    if (state.ui_capture_keyboard) {
         return;
     }
 
@@ -684,7 +685,7 @@ fn on_key(
     if (mods.shift) mod |= 1;
     if (mods.control) mod |= 2;
 
-    // std.debug.print("Key: {} {}\n", .{ key, state.gui_capture_keyboard });
+    // std.debug.print("Key: {} {}\n", .{ key, state.ui_capture_keyboard });
 
     if (key == .escape and action == .press and mod == 3) {
         _ = window.setShouldClose(true);
@@ -712,11 +713,11 @@ fn on_char(window: *glfw.Window, char: u32) callconv(.C) void {
     const zone = tracy.ZoneNC(@src(), "on_char", 0x00_ff_00_00);
     defer zone.End();
 
-    if (state.gui_capture_text) {
+    if (state.ui_capture_text) {
         return;
     }
 
-    // std.debug.print("Char: {x:0>4} {}\n", .{ char, state.gui_capture_keyboard });
+    // std.debug.print("Char: {x:0>4} {}\n", .{ char, state.ui_capture_keyboard });
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -731,11 +732,11 @@ fn on_mouse_move(window: *glfw.Window, x: f64, y: f64) callconv(.C) void {
     const zone = tracy.ZoneNC(@src(), "on_mouse_move", 0x00_ff_00_00);
     defer zone.End();
 
-    if (state.gui_capture_mouse) {
+    if (state.ui_capture_mouse) {
         return;
     }
 
-    // std.debug.print("Mouse: {d:0.1},{d:0.1} {}\n", .{ x, y, state.gui_capture_mouse });
+    // std.debug.print("Mouse: {d:0.1},{d:0.1} {}\n", .{ x, y, state.ui_capture_mouse });
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
