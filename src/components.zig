@@ -16,17 +16,19 @@ const ecs = @import("ecs.zig");
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 pub const Position = struct {
-    x: f32,
-    y: f32,
-    z: f32,
+    x: f32 = 0,
+    y: f32 = 0,
+    z: f32 = 0,
 };
 
-pub const Quarternion = struct {
-    q: math.F32x4,
-};
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
 
-pub const Matrix = struct {
-    m: math.Mat,
+pub const Velocity = struct {
+    dx: f32 = 0,
+    dy: f32 = 0,
+    dz: f32 = 0,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -186,8 +188,7 @@ pub fn register(world: *ecs.World) !void {
     _ = try world.register_component(Node);
     _ = try world.register_component(Link);
     _ = try world.register_component(Position);
-    _ = try world.register_component(Quarternion);
-    _ = try world.register_component(Matrix);
+    _ = try world.register_component(Velocity);
     _ = try world.register_component(Rotation);
     _ = try world.register_component(BuildingSize);
     _ = try world.register_component(Model);

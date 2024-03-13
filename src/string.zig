@@ -38,7 +38,7 @@ pub fn deinit() void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-pub fn intern(slice: []const u8) !String {
+pub fn intern(slice: []const u8) String {
     if (std.mem.indexOf(u8, string_memory.items, slice)) |index| {
         return .{
             .index = @truncate(index),
@@ -46,7 +46,13 @@ pub fn intern(slice: []const u8) !String {
         };
     }
     const index = string_memory.items.len;
-    try string_memory.appendSlice(slice);
+    string_memory.appendSlice(slice) catch {
+        std.debug.print ("ERROR: Out of memory in intern\n", .{});
+        return .{
+            .index = 0,
+            .len = 0,
+        };
+    };
     return .{
         .index = @truncate(index),
         .len = @truncate(slice.len),

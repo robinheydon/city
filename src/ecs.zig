@@ -45,12 +45,16 @@ const TypeInfo = struct {
 
     const TypeHash = u64;
 
+    ////////////////////////////////////////
+
     inline fn per_type_global_var(comptime T: type) *TypeInfo {
         _ = T;
         return &(struct {
             var ti: TypeInfo = undefined;
         }.ti);
     }
+
+    ////////////////////////////////////////
 
     pub fn from(comptime T: type) *const TypeInfo {
         const tip = per_type_global_var(T);
@@ -69,10 +73,14 @@ const TypeInfo = struct {
         return tip;
     }
 
+    ////////////////////////////////////////
+
     pub fn lessThan(ctx: void, lhs: *const TypeInfo, rhs: *const TypeInfo) bool {
         _ = ctx;
         return lhs.hash < rhs.hash;
     }
+
+    ////////////////////////////////////////
 
     pub fn format(self: TypeInfo, fmt: []const u8, options: anytype, writer: anytype) !void {
         _ = fmt;
@@ -217,9 +225,34 @@ pub const Entity = struct {
     world: *World,
     id: EntityId,
 
-    pub fn set_label(self: Entity, label: String) !void {
-        try self.world.entity_labels.put(self.world.alloc, self.id.index, label);
+    pub fn set_label(self: Entity, label: String) void {
+        self.world.entity_labels.put(self.world.alloc, self.id.index, label) catch {};
     }
+
+    pub fn destroy (self: Entity) void {
+        self.world.destroy(self.id);
+    }
+
+    pub fn set (self: Entity, comptime value: anytype) void {
+        const T = @TypeOf (value);
+        const type_info = TypeInfo.from (T);
+        std.debug.print ("{} {} {}\n", .{self.id, type_info, value});
+    }
+
+    pub fn get (self: Entity, comptime T: type) ?T {
+        const type_info = TypeInfo.from (T);
+        std.debug.print ("{} {}\n", .{self.id, type_info});
+        return null;
+    }
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+pub const Archetype = struct {
+    name: String,
+    components: std.ArrayListUnmanaged (EntityId) = .{},
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -252,6 +285,8 @@ pub const World = struct {
     usize: EntityId = undefined,
     String: EntityId = undefined,
     EntityId: EntityId = undefined,
+
+    ////////////////////////////////////////
 
     pub fn deinit(self: *World) void {
         self.generations.deinit(self.alloc);
@@ -300,7 +335,7 @@ pub const World = struct {
 
     ////////////////////////////////////////
 
-    pub fn valid_entity(self: World, e: Entity) bool {
+    pub fn valid_entity(self: World, e: EntityId) bool {
         return ((e.index != max_index) and
             (e.generation != max_generation) and
             (e.index < self.generations.items.len) and
@@ -309,13 +344,13 @@ pub const World = struct {
 
     ////////////////////////////////////////
 
-    pub fn get_immortal(self: World, e: Entity) bool {
+    pub fn get_immortal(self: World, e: EntityId) bool {
         return self.generations.items[e.index].immortal;
     }
 
     ////////////////////////////////////////
 
-    pub fn destroy(self: *World, e: Entity) void {
+    pub fn destroy(self: *World, e: EntityId) void {
         if (self.valid_entity(e) and self.get_immortal(e) == false) {
             var next_generation = e.generation + 1;
             if (next_generation == max_generation) {
@@ -343,7 +378,7 @@ pub const World = struct {
         }
 
         const entity = self.create_with_immortal(true);
-        const name = try intern(@typeName(C));
+        const name = intern(@typeName(C));
 
         result.value_ptr.* = .{
             .name = name,
@@ -352,7 +387,7 @@ pub const World = struct {
             .entity_id = entity.id,
         };
 
-        try entity.set_label(name);
+        entity.set_label(name);
 
         var fields: std.ArrayListUnmanaged(ComponentField) = .{};
 
@@ -365,7 +400,7 @@ pub const World = struct {
                             fields.append(
                                 self.alloc,
                                 .{
-                                    .name = try intern(field.name),
+                                    .name = intern(field.name),
                                     .offset = @bitOffsetOf(C, field.name),
                                     .size = @bitSizeOf(field.type),
                                     .kind = ent.id,
@@ -377,7 +412,7 @@ pub const World = struct {
                             fields.append(
                                 self.alloc,
                                 .{
-                                    .name = try intern(field.name),
+                                    .name = intern(field.name),
                                     .offset = @bitOffsetOf(C, field.name),
                                     .size = @bitSizeOf(field.type),
                                     .array_length = arr.len,
@@ -391,7 +426,7 @@ pub const World = struct {
                                 fields.append(
                                     self.alloc,
                                     .{
-                                        .name = try intern(field.name),
+                                        .name = intern(field.name),
                                         .offset = @bitOffsetOf(C, field.name),
                                         .size = @bitSizeOf(field.type),
                                         .array_length = 0,
@@ -408,7 +443,7 @@ pub const World = struct {
                             fields.append(
                                 self.alloc,
                                 .{
-                                    .name = try intern(field.name),
+                                    .name = intern(field.name),
                                     .offset = @bitOffsetOf(C, field.name),
                                     .size = @bitSizeOf(field.type),
                                     .array_length = vec.len,
@@ -421,7 +456,7 @@ pub const World = struct {
                             fields.append(
                                 self.alloc,
                                 .{
-                                    .name = try intern(field.name),
+                                    .name = intern(field.name),
                                     .offset = @bitOffsetOf(C, field.name),
                                     .size = @bitSizeOf(field.type),
                                     .kind = ent.id,
@@ -433,7 +468,7 @@ pub const World = struct {
                             fields.append(
                                 self.alloc,
                                 .{
-                                    .name = try intern(field.name),
+                                    .name = intern(field.name),
                                     .offset = @bitOffsetOf(C, field.name),
                                     .size = @bitSizeOf(field.type),
                                     .kind = ent.id,
@@ -448,7 +483,7 @@ pub const World = struct {
                     fields.append(
                         self.alloc,
                         .{
-                            .name = try intern(field.name),
+                            .name = intern(field.name),
                             .value = field.value,
                         },
                     ) catch unreachable;
@@ -474,6 +509,13 @@ pub const World = struct {
         if (self.components.getPtr(type_info.hash)) |component| {
             component.sparse = true;
         }
+    }
+
+    ////////////////////////////////////////
+
+    pub fn step (self: World, delta_time: f32) void {
+        _ = self;
+        _ = delta_time;
     }
 
     ////////////////////////////////////////
@@ -539,261 +581,9 @@ pub const World = struct {
                 }
             }
         }
+        try writer.writeAll("\n  Archetypes");
     }
 };
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-// test "World entity sizes" {
-//     const Small_World = SmallECS();
-//     const Medium_World = MediumECS();
-//     const Large_World = LargeECS();
-//     const Custom_World = ECS(u10, u6);
-//
-//     var small_world = Small_World.init(std.testing.allocator);
-//     var medium_world = Medium_World.init(std.testing.allocator);
-//     var large_world = Large_World.init(std.testing.allocator);
-//     var custom_world = Custom_World.init(std.testing.allocator);
-//
-//     try std.testing.expectEqual(2, @sizeOf(Small_World.Entity));
-//     try std.testing.expectEqual(4, @sizeOf(Medium_World.Entity));
-//     try std.testing.expectEqual(6, @sizeOf(Large_World.Entity));
-//     try std.testing.expectEqual(2, @sizeOf(Custom_World.Entity));
-//
-//     small_world.deinit();
-//     medium_world.deinit();
-//     large_world.deinit();
-//     custom_world.deinit();
-// }
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-// test "Entity creation" {
-//     var world = SmallECS().init(std.testing.allocator);
-//
-//     const e0 = world.create();
-//     const e1 = world.create();
-//     const e2 = world.create();
-//     const e3 = world.create();
-//     const e4 = world.create();
-//     const e5 = world.create();
-//
-//     try std.testing.expectFmt("E(0:0)", "{}", .{e0});
-//     try std.testing.expectFmt("E(0:1)", "{}", .{e1});
-//     try std.testing.expectFmt("E(0:2)", "{}", .{e2});
-//     try std.testing.expectFmt("E(0:3)", "{}", .{e3});
-//     try std.testing.expectFmt("E(0:4)", "{}", .{e4});
-//     try std.testing.expectFmt("E(0:5)", "{}", .{e5});
-//
-//     world.destroy(e2);
-//     world.destroy(e4);
-//
-//     const e6 = world.create();
-//     const e7 = world.create();
-//
-//     try std.testing.expectFmt("E(1:4)", "{}", .{e6});
-//     try std.testing.expectFmt("E(1:2)", "{}", .{e7});
-//
-//     world.destroy(e3);
-//     world.destroy(e6);
-//
-//     const e8 = world.create();
-//
-//     try std.testing.expectFmt("E(2:4)", "{}", .{e8});
-//
-//     try std.testing.expectFmt(
-//         \\World
-//         \\  Entities
-//         \\    E(0:0)
-//         \\    E(0:1)
-//         \\    E(1:2)
-//         \\    E(2:4)
-//         \\    E(0:5)
-//     , "{}", .{world});
-//
-//     world.deinit();
-// }
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-// test "Too many entities" {
-//     var world = ECS(u3, u8).init(std.testing.allocator);
-//
-//     const e0 = world.create();
-//     const e1 = world.create();
-//     const e2 = world.create();
-//     const e3 = world.create();
-//     const e4 = world.create();
-//     const e5 = world.create();
-//     const e6 = world.create();
-//     const e7 = world.create();
-//     const e8 = world.create();
-//
-//     try std.testing.expectFmt("E(0:0)", "{}", .{e0});
-//     try std.testing.expectFmt("E(0:1)", "{}", .{e1});
-//     try std.testing.expectFmt("E(0:2)", "{}", .{e2});
-//     try std.testing.expectFmt("E(0:3)", "{}", .{e3});
-//     try std.testing.expectFmt("E(0:4)", "{}", .{e4});
-//     try std.testing.expectFmt("E(0:5)", "{}", .{e5});
-//     try std.testing.expectFmt("E(0:6)", "{}", .{e6});
-//     try std.testing.expectFmt("E(null)", "{}", .{e7});
-//     try std.testing.expectFmt("E(null)", "{}", .{e8});
-//
-//     try std.testing.expectFmt(
-//         \\World
-//         \\  Entities
-//         \\    E(0:0)
-//         \\    E(0:1)
-//         \\    E(0:2)
-//         \\    E(0:3)
-//         \\    E(0:4)
-//         \\    E(0:5)
-//         \\    E(0:6)
-//     , "{}", .{world});
-//
-//     world.destroy(e3);
-//     world.destroy(e2);
-//     world.destroy(e5);
-//     world.destroy(e6);
-//
-//     try std.testing.expectFmt(
-//         \\World
-//         \\  Entities
-//         \\    E(0:0)
-//         \\    E(0:1)
-//         \\    E(0:4)
-//     , "{}", .{world});
-//
-//     const e9 = world.create();
-//     const e10 = world.create();
-//     const e11 = world.create();
-//     const e12 = world.create();
-//     const e13 = world.create();
-//
-//     try std.testing.expectFmt("E(1:6)", "{}", .{e9});
-//     try std.testing.expectFmt("E(1:5)", "{}", .{e10});
-//     try std.testing.expectFmt("E(1:2)", "{}", .{e11});
-//     try std.testing.expectFmt("E(1:3)", "{}", .{e12});
-//     try std.testing.expectFmt("E(null)", "{}", .{e13});
-//
-//     try std.testing.expectFmt(
-//         \\World
-//         \\  Entities
-//         \\    E(0:0)
-//         \\    E(0:1)
-//         \\    E(1:2)
-//         \\    E(1:3)
-//         \\    E(0:4)
-//         \\    E(1:5)
-//         \\    E(1:6)
-//     , "{}", .{world});
-//
-//     try std.testing.expectEqual(@sizeOf(@TypeOf(world.generations.items[0])) * world.generations.capacity, 2 * 8);
-//
-//     world.deinit();
-// }
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-// test "valid entity tests" {
-//     const World = ECS(u3, u8);
-//     var world = World.init(std.testing.allocator);
-//
-//     const e0 = world.create();
-//     const e1 = world.create();
-//     const e2 = world.create();
-//     const e3 = world.create();
-//
-//     try std.testing.expectFmt("E(0:0) true", "{} {}", .{ e0, world.valid_entity(e0) });
-//     try std.testing.expectFmt("E(0:1) true", "{} {}", .{ e1, world.valid_entity(e1) });
-//     try std.testing.expectFmt("E(0:2) true", "{} {}", .{ e2, world.valid_entity(e2) });
-//     try std.testing.expectFmt("E(0:3) true", "{} {}", .{ e3, world.valid_entity(e3) });
-//
-//     world.destroy(e2);
-//
-//     try std.testing.expectFmt("E(0:0) true", "{} {}", .{ e0, world.valid_entity(e0) });
-//     try std.testing.expectFmt("E(0:2) false", "{} {}", .{ e2, world.valid_entity(e2) });
-//
-//     const e4 = world.create();
-//
-//     try std.testing.expectFmt("E(0:2) false", "{} {}", .{ e2, world.valid_entity(e2) });
-//     try std.testing.expectFmt("E(1:2) true", "{} {}", .{ e4, world.valid_entity(e4) });
-//
-//     const e5 = World.Entity{ .index = 7, .generation = 0 };
-//     const e6 = World.Entity{ .index = 0, .generation = 255 };
-//
-//     try std.testing.expectFmt("E(0:7) false", "{} {}", .{ e5, world.valid_entity(e5) });
-//     try std.testing.expectFmt("E(ff:0) false", "{} {}", .{ e6, world.valid_entity(e6) });
-//
-//     try std.testing.expectFmt(
-//         \\World
-//         \\  Entities
-//         \\    E(0:0)
-//         \\    E(0:1)
-//         \\    E(1:2)
-//         \\    E(0:3)
-//     , "{}", .{world});
-//
-//     world.deinit();
-// }
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-// test "simple components" {
-//     const Position = struct { x: f32, y: f32 };
-//     const Velocity = struct { dx: f32, dy: f32 };
-//     const Player = struct {};
-//
-//     var world = ECS(u8, u8).init(std.testing.allocator);
-//
-//     const c0 = world.register_component(Position, .{});
-//     const e0 = world.create();
-//     const e1 = world.create();
-//     const c1 = world.register_component(Velocity, .{});
-//     const c2 = world.register_component(Position, .{});
-//     const c3 = world.register_component(Player, .{});
-//     const e2 = world.create();
-//     const e3 = world.create();
-//
-//     try std.testing.expectFmt("E(0:0)", "{}", .{c0});
-//     try std.testing.expectFmt("E(0:1)", "{}", .{e0});
-//     try std.testing.expectFmt("E(0:2)", "{}", .{e1});
-//     try std.testing.expectFmt("E(0:3)", "{}", .{c1});
-//     try std.testing.expectFmt("E(0:0)", "{}", .{c2});
-//     try std.testing.expectFmt("E(0:4)", "{}", .{c3});
-//     try std.testing.expectFmt("E(0:5)", "{}", .{e2});
-//     try std.testing.expectFmt("E(0:6)", "{}", .{e3});
-//
-//     world.destroy(c0);
-//     world.destroy(e0);
-//
-//     try std.testing.expectFmt(
-//         \\World
-//         \\  Entities
-//         \\    E(0:0)*
-//         \\    E(0:2)
-//         \\    E(0:3)*
-//         \\    E(0:4)*
-//         \\    E(0:5)
-//         \\    E(0:6)
-//         \\  Components
-//         \\    E(0:0) TypeInfo(Position:8:4)
-//         \\    E(0:3) TypeInfo(Velocity:8:4)
-//         \\    E(0:4) TypeInfo(Player:0:0)
-//     , "{}", .{world});
-//
-//     world.deinit();
-// }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////

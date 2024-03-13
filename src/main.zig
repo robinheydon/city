@@ -16,8 +16,11 @@ const gfx = @import("gfx.zig");
 const random = @import("random.zig");
 const terrain = @import("terrain.zig");
 const rand = random.rand;
-const components = @import("components.zig");
 const ecs = @import("ecs.zig");
+
+const string = @import("string.zig");
+const String = string.String;
+const intern = string.intern;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -25,6 +28,14 @@ const ecs = @import("ecs.zig");
 
 pub const TerrainMesh = gfx.Mesh(gfx.TerrainVertex);
 const Mesh = gfx.Mesh(gfx.Vertex);
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+const components = @import("components.zig");
+const Position = components.Position;
+const Velocity = components.Velocity;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -132,9 +143,15 @@ pub fn main() !void {
 
     var tracy_allocator = tracy.TracyAllocator{ .child_allocator = gpa.allocator() };
 
-    // var logging_allocator = std.heap.loggingAllocator (tracy_allocator.allocator ());
-
-    state.allocator = tracy_allocator.allocator();
+    if (false)
+    {
+        var logging_allocator = std.heap.loggingAllocator (tracy_allocator.allocator ());
+        state.allocator = logging_allocator.allocator();
+    }
+    else
+    {
+        state.allocator = tracy_allocator.allocator();
+    }
 
     std.debug.print("City\n", .{});
     std.debug.print("  cpus = {}\n", .{try std.Thread.getCpuCount()});
@@ -146,6 +163,36 @@ pub fn main() !void {
     defer world.deinit();
 
     try components.register(&world);
+
+    {
+        const ent = world.create ();
+        ent.set_label (intern ("Player"));
+        ent.set (Position {.x = 4, .y = 1});
+        ent.set (Velocity {.dy = 1});
+
+        world.step (1);
+
+        {
+            const pos = ent.get (Position);
+            const vel = ent.get (Velocity);
+            std.debug.print ("{} pos = {?}\n vel = {?}\n", .{ent, pos, vel});
+        }
+    }
+
+    {
+        const ent = world.create ();
+        ent.set_label (intern ("Other"));
+        ent.set (Velocity {.dx = 1});
+        ent.set (Position {.x = 2, .y = 5});
+
+        world.step (1);
+
+        {
+            const pos = ent.get (Position);
+            const vel = ent.get (Velocity);
+            std.debug.print ("{} pos = {?}\n vel = {?}\n", .{ent, pos, vel});
+        }
+    }
 
     std.debug.print("{}\n", .{world});
     std.process.exit(0);
@@ -201,7 +248,7 @@ pub fn main() !void {
     ui.backend.init(state.main_window);
     defer ui.backend.deinit();
 
-    _ = ui.io.addFontFromMemory(fonts.atkinson_regular, 24);
+    _ = ui.io.addFontFromMemory(fonts.body_font, 24);
 
     ui.getStyle().scaleAllSizes(1);
 
