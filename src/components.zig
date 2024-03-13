@@ -21,6 +21,14 @@ pub const Position = struct {
     z: f32,
 };
 
+pub const Quarternion = struct {
+    q: math.F32x4,
+};
+
+pub const Matrix = struct {
+    m: math.Mat,
+};
+
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -54,9 +62,9 @@ pub const Model = packed struct(u32) {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 pub const RouteRequest = struct {
-    entity: ecs.Entity,
-    source: ecs.Entity,
-    destination: ecs.Entity,
+    entity: ecs.EntityId,
+    source: ecs.EntityId,
+    destination: ecs.EntityId,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -64,8 +72,8 @@ pub const RouteRequest = struct {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 pub const Node = struct {
-    links: std.ArrayListUnmanaged(ecs.Entity),
-    priority_links: [2]ecs.Entity,
+    links: std.ArrayListUnmanaged(ecs.EntityId),
+    priority: [2]ecs.EntityId,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -73,10 +81,10 @@ pub const Node = struct {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 pub const Link = struct {
-    start_node: ecs.Entity,
-    end_node: ecs.Entity,
+    start_node: ecs.EntityId,
+    end_node: ecs.EntityId,
     width: f32,
-    layout: ecs.Entity,
+    layout: ecs.EntityId,
     start_control_x: f32,
     start_control_y: f32,
     end_control_x: f32,
@@ -90,7 +98,8 @@ pub const Link = struct {
 pub const LinkLayout = struct {
     width: f32,
     speed_limit: f32,
-    lanes: std.ArrayListUnmanaged(Lane),
+    number_lanes: u8,
+    lanes: [32]Lane,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -164,7 +173,37 @@ pub const Route = struct {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
+pub const Person = struct {};
 pub const DeadPerson = struct {};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+pub fn register(world: *ecs.World) !void {
+    _ = try world.register_component(Route);
+    _ = try world.register_component(RouteRequest);
+    _ = try world.register_component(Node);
+    _ = try world.register_component(Link);
+    _ = try world.register_component(Position);
+    _ = try world.register_component(Quarternion);
+    _ = try world.register_component(Matrix);
+    _ = try world.register_component(Rotation);
+    _ = try world.register_component(BuildingSize);
+    _ = try world.register_component(Model);
+    _ = try world.register_component(LinkLayout);
+    _ = try world.register_component(Lane);
+    _ = try world.register_component(LaneKind);
+    _ = try world.register_component(LaneRestriction);
+    _ = try world.register_component(DeadPerson);
+    _ = try world.register_component(Person);
+
+    world.set_sparse_component(RouteRequest);
+    world.set_sparse_component(LinkLayout);
+    world.set_sparse_component(Lane);
+    world.set_sparse_component(LaneKind);
+    world.set_sparse_component(LaneRestriction);
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////

@@ -145,7 +145,8 @@ pub fn main() !void {
     var world = try ecs.init(state.allocator);
     defer world.deinit();
 
-    try world.register_components(components);
+    try components.register(&world);
+
     std.debug.print("{}\n", .{world});
     std.process.exit(0);
 
