@@ -47,7 +47,7 @@ pub fn intern(slice: []const u8) String {
     }
     const index = string_memory.items.len;
     string_memory.appendSlice(slice) catch {
-        std.debug.print ("ERROR: Out of memory in intern\n", .{});
+        std.debug.print("ERROR: Out of memory in intern\n", .{});
         return .{
             .index = 0,
             .len = 0,
@@ -57,6 +57,14 @@ pub fn intern(slice: []const u8) String {
         .index = @truncate(index),
         .len = @truncate(slice.len),
     };
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+pub fn eql(lhs: String, rhs: String) bool {
+    return (lhs.index == rhs.index and lhs.len == rhs.len);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

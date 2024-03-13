@@ -143,13 +143,10 @@ pub fn main() !void {
 
     var tracy_allocator = tracy.TracyAllocator{ .child_allocator = gpa.allocator() };
 
-    if (false)
-    {
-        var logging_allocator = std.heap.loggingAllocator (tracy_allocator.allocator ());
+    if (false) {
+        var logging_allocator = std.heap.loggingAllocator(tracy_allocator.allocator());
         state.allocator = logging_allocator.allocator();
-    }
-    else
-    {
+    } else {
         state.allocator = tracy_allocator.allocator();
     }
 
@@ -165,32 +162,60 @@ pub fn main() !void {
     try components.register(&world);
 
     {
-        const ent = world.create ();
-        ent.set_label (intern ("Player"));
-        ent.set (Position {.x = 4, .y = 1});
-        ent.set (Velocity {.dy = 1});
+        const ent = world.create();
+        ent.set_label(intern("Player"));
+        ent.set(Position{ .x = 4, .y = 1 });
+        ent.set(Velocity{ .dy = 1 });
 
-        world.step (1);
+        world.step(1);
 
         {
-            const pos = ent.get (Position);
-            const vel = ent.get (Velocity);
-            std.debug.print ("{} pos = {?}\n vel = {?}\n", .{ent, pos, vel});
+            const pos = ent.get(Position);
+            const vel = ent.get(Velocity);
+            std.debug.print("{}\n pos = {?}\n vel = {?}\n", .{ ent, pos, vel });
         }
     }
 
     {
-        const ent = world.create ();
-        ent.set_label (intern ("Other"));
-        ent.set (Velocity {.dx = 1});
-        ent.set (Position {.x = 2, .y = 5});
+        const ent = world.create();
+        ent.set_label(intern("Other"));
+        ent.set(Velocity{ .dx = 1 });
+        ent.set(Position{ .x = 2, .y = 5 });
 
-        world.step (1);
+        world.step(1);
 
         {
-            const pos = ent.get (Position);
-            const vel = ent.get (Velocity);
-            std.debug.print ("{} pos = {?}\n vel = {?}\n", .{ent, pos, vel});
+            const pos = ent.get(Position);
+            const vel = ent.get(Velocity);
+            std.debug.print("{}\n pos = {?}\n vel = {?}\n", .{ ent, pos, vel });
+        }
+    }
+
+    {
+        const ent = world.create();
+        ent.set_label(intern("Stuff"));
+        ent.set(Position{ .x = 2, .y = 5 });
+
+        world.step(1);
+
+        {
+            const pos = ent.get(Position);
+            const vel = ent.get(Velocity);
+            std.debug.print("{}\n pos = {?}\n vel = {?}\n", .{ ent, pos, vel });
+        }
+    }
+
+    {
+        const ent = world.create();
+        ent.set_label(intern("Wibble"));
+        ent.set(Velocity{ .dx = 1 });
+
+        world.step(1);
+
+        {
+            const pos = ent.get(Position);
+            const vel = ent.get(Velocity);
+            std.debug.print("{}\n pos = {?}\n vel = {?}\n", .{ ent, pos, vel });
         }
     }
 

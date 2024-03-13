@@ -183,21 +183,21 @@ pub const DeadPerson = struct {};
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 pub fn register(world: *ecs.World) !void {
-    _ = try world.register_component(Route);
-    _ = try world.register_component(RouteRequest);
-    _ = try world.register_component(Node);
-    _ = try world.register_component(Link);
-    _ = try world.register_component(Position);
-    _ = try world.register_component(Velocity);
-    _ = try world.register_component(Rotation);
-    _ = try world.register_component(BuildingSize);
-    _ = try world.register_component(Model);
-    _ = try world.register_component(LinkLayout);
-    _ = try world.register_component(Lane);
-    _ = try world.register_component(LaneKind);
-    _ = try world.register_component(LaneRestriction);
-    _ = try world.register_component(DeadPerson);
-    _ = try world.register_component(Person);
+    _ = try world.register_component(Route, "Route");
+    _ = try world.register_component(RouteRequest, "RouteRequest");
+    _ = try world.register_component(Node, "Node");
+    _ = try world.register_component(Link, "Link");
+    _ = try world.register_component(Position, "Position");
+    _ = try world.register_component(Velocity, "Velocity");
+    _ = try world.register_component(Rotation, "Rotation");
+    _ = try world.register_component(BuildingSize, "BuildingSize");
+    _ = try world.register_component(Model, "Model");
+    _ = try world.register_component(LinkLayout, "LinkLayout");
+    _ = try world.register_component(Lane, "Lane");
+    _ = try world.register_component(LaneKind, "LaneKind");
+    _ = try world.register_component(LaneRestriction, "LandRestriction");
+    _ = try world.register_component(DeadPerson, "DeadPerson");
+    _ = try world.register_component(Person, "Person");
 
     world.set_sparse_component(RouteRequest);
     world.set_sparse_component(LinkLayout);
