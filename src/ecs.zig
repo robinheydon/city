@@ -125,13 +125,13 @@ pub const ComponentOptions = struct {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-pub const Entity = packed struct(u32) {
+pub const EntityId = packed struct(u32) {
     index: EntityIndex,
     generation: EntityGeneration,
 
     ////////////////////////////////////////
 
-    pub fn format(self: Entity, fmt: []const u8, opt: anytype, writer: anytype) !void {
+    pub fn format(self: EntityId, fmt: []const u8, opt: anytype, writer: anytype) !void {
         _ = fmt;
         _ = opt;
 
@@ -145,7 +145,7 @@ pub const Entity = packed struct(u32) {
 
 ////////////////////////////////////////
 
-const null_entity = Entity{ .index = max_index, .generation = max_generation };
+const null_entity_id = EntityId{ .index = max_index, .generation = max_generation };
 
 ////////////////////////////////////////
 
@@ -153,6 +153,7 @@ const max_index = std.math.maxInt(EntityIndex);
 const max_generation = std.math.maxInt(EntityGeneration);
 const GenerationArray = std.ArrayListUnmanaged(EntityData);
 const ComponentArray = std.AutoArrayHashMapUnmanaged(TypeInfo.TypeHash, ComponentInfo);
+const EntityLabelArray = std.AutoArrayHashMapUnmanaged(EntityIndex, String);
 
 ////////////////////////////////////////
 
@@ -175,7 +176,7 @@ const ComponentField = struct {
     name: String,
     offset: usize = 0,
     size: usize = 0,
-    kind: Entity = null_entity,
+    kind: EntityId = null_entity_id,
     value: u64 = 0,
 };
 
@@ -184,7 +185,7 @@ const ComponentField = struct {
 const ComponentInfo = struct {
     name: String,
     type_info: *const TypeInfo,
-    entity: Entity,
+    entity_id: EntityId,
     fields: std.ArrayListUnmanaged(ComponentField) = .{},
 };
 
@@ -198,24 +199,31 @@ pub fn init(allocator: std.mem.Allocator) !World {
 
     try string.init (allocator);
 
-    world.@"null" = try world.register_component(void);
-    world.bool = try world.register_component(bool);
-    world.u8 = try world.register_component(u8);
-    world.u16 = try world.register_component(u16);
-    world.u32 = try world.register_component(u32);
-    world.u64 = try world.register_component(u64);
-    world.i8 = try world.register_component(i8);
-    world.i16 = try world.register_component(i16);
-    world.i32 = try world.register_component(i32);
-    world.i64 = try world.register_component(i64);
-    world.f32 = try world.register_component(f32);
-    world.f64 = try world.register_component(f64);
-    world.usize = try world.register_component(usize);
-    world.String = try world.register_component(String);
-    world.Entity = try world.register_component(Entity);
+    world.@"null" = (try world.register_component(void)).id;
+    world.bool = (try world.register_component(bool)).id;
+    world.u8 = (try world.register_component(u8)).id;
+    world.u16 = (try world.register_component(u16)).id;
+    world.u32 = (try world.register_component(u32)).id;
+    world.u64 = (try world.register_component(u64)).id;
+    world.i8 = (try world.register_component(i8)).id;
+    world.i16 = (try world.register_component(i16)).id;
+    world.i32 = (try world.register_component(i32)).id;
+    world.i64 = (try world.register_component(i64)).id;
+    world.f32 = (try world.register_component(f32)).id;
+    world.f64 = (try world.register_component(f64)).id;
+    world.usize = (try world.register_component(usize)).id;
+    world.String = (try world.register_component(String)).id;
+    world.EntityId = (try world.register_component(EntityId)).id;
 
     return world;
 }
+
+////////////////////////////////////////
+
+pub const Entity = struct {
+    world: *World,
+    id: EntityId,
+};
 
 ////////////////////////////////////////
 
@@ -225,21 +233,22 @@ const World = struct {
     num_deleted: usize = 0,
     next_deleted: EntityIndex = max_index,
     components: ComponentArray = .{},
-    null: Entity = undefined,
-    bool: Entity = undefined,
-    u8: Entity = undefined,
-    u16: Entity = undefined,
-    u32: Entity = undefined,
-    u64: Entity = undefined,
-    i8: Entity = undefined,
-    i16: Entity = undefined,
-    i32: Entity = undefined,
-    i64: Entity = undefined,
-    f32: Entity = undefined,
-    f64: Entity = undefined,
-    usize: Entity = undefined,
-    String: Entity = undefined,
-    Entity: Entity = undefined,
+    entity_names: EntityLabelArray = .{},
+    null: EntityId = undefined,
+    bool: EntityId = undefined,
+    u8: EntityId = undefined,
+    u16: EntityId = undefined,
+    u32: EntityId = undefined,
+    u64: EntityId = undefined,
+    i8: EntityId = undefined,
+    i16: EntityId = undefined,
+    i32: EntityId = undefined,
+    i64: EntityId = undefined,
+    f32: EntityId = undefined,
+    f64: EntityId = undefined,
+    usize: EntityId = undefined,
+    String: EntityId = undefined,
+    EntityId: EntityId = undefined,
 
     pub fn deinit(self: *World) void {
         self.generations.deinit(self.alloc);
@@ -255,8 +264,8 @@ const World = struct {
             const old_e = self.generations.items[index];
             self.next_deleted = old_e.index;
             self.num_deleted -= 1;
-            const new_e = Entity{ .index = index, .generation = old_e.generation };
-            self.generations.items[index] = EntityData{ .index = new_e.index, .generation = new_e.generation, .immortal = immortal };
+            const new_e = Entity{ .world = self, .id = .{ .index = index, .generation = old_e.generation }, };
+            self.generations.items[index] = EntityData{ .index = new_e.id.index, .generation = new_e.id.generation, .immortal = immortal };
             return new_e;
         } else {
             const index = self.generations.items.len;
@@ -265,11 +274,11 @@ const World = struct {
                 const ed = EntityData{ .index = @truncate(index), .generation = 0, .immortal = immortal };
                 self.generations.append(self.alloc, ed) catch |err| {
                     std.log.err("Cannot create entity {}", .{err});
-                    return null_entity;
+                    return .{ .world = self, .id = null_entity_id };
                 };
-                return Entity{ .index = ed.index, .generation = ed.generation };
+                return .{ .world = self, .id = .{ .index = ed.index, .generation = ed.generation}, };
             } else {
-                return null_entity;
+                return .{ .world = self, .id = null_entity_id };
             }
         }
     }
@@ -313,15 +322,15 @@ const World = struct {
 
     ////////////////////////////////////////
 
-    pub fn register_component(self: *World, comptime C: type) !Entity {
+    pub fn register_component_only(self: *World, comptime C: type) !Entity {
         const type_info = TypeInfo.from(C);
 
-        var result = self.components.getOrPut(self.alloc, type_info.hash) catch {
-            return null_entity;
+        const result = self.components.getOrPut(self.alloc, type_info.hash) catch {
+            return .{ .world = self, .id = null_entity_id };
         };
 
         if (result.found_existing) {
-            return result.value_ptr.entity;
+            return .{ .world = self, .id = result.value_ptr.entity_id };
         }
 
         const entity = self.create_with_immortal(true);
@@ -329,38 +338,63 @@ const World = struct {
         result.value_ptr.* = .{
             .name = try intern (@typeName(C)),
             .type_info = type_info,
-            .entity = entity,
+            .entity_id = entity.id,
         };
 
-        var fields: std.ArrayListUnmanaged(ComponentField) = .{};
+        return entity;
+    }
 
-        std.debug.print("  {} {} {}\n", .{ C, type_info, result.value_ptr.entity });
+    ////////////////////////////////////////
+
+    pub fn register_component(self: *World, comptime C: type) !Entity {
+        const type_info = TypeInfo.from(C);
+
+        var result = self.components.getOrPut(self.alloc, type_info.hash) catch {
+            return .{ .world = self, .id = null_entity_id };
+        };
+
+        if (result.found_existing) {
+            return .{ .world = self, .id = result.value_ptr.entity_id };
+        }
+
+        const entity = self.create_with_immortal(true);
+        const name = try intern (@typeName(C));
+
+        result.value_ptr.* = .{
+            .name = name,
+            .type_info = type_info,
+            .entity_id = entity.id,
+        };
+
+        // try entity.set_label (name);
+
+        var fields: std.ArrayListUnmanaged(ComponentField) = .{};
 
         switch (@typeInfo(C)) {
             .Struct => |struct_type_info| {
                 inline for (struct_type_info.fields) |field| {
                     switch (@typeInfo(field.type)) {
                         .Struct => {
-                            const ent = try self.register_component(field.type);
+                            const ent = try self.register_component_only(field.type);
                             fields.append(
                                 self.alloc,
                                 .{
                                     .name = try intern (field.name),
                                     .offset = @bitOffsetOf(C, field.name),
                                     .size = @bitSizeOf(field.type),
-                                    .kind = ent,
+                                    .kind = ent.id,
                                 },
                             ) catch unreachable;
                         },
                         else => {
-                            const ent = try self.register_component(field.type);
+                            const ent = try self.register_component_only(field.type);
                             fields.append(
                                 self.alloc,
                                 .{
                                     .name = try intern (field.name),
                                     .offset = @bitOffsetOf(C, field.name),
                                     .size = @bitSizeOf(field.type),
-                                    .kind = ent,
+                                    .kind = ent.id,
                                 },
                             ) catch unreachable;
                         },
@@ -398,8 +432,6 @@ const World = struct {
         const module_struct = module_type_info.Struct;
         inline for (module_struct.decls) |decl| {
             const field = @field(Module, decl.name);
-            std.debug.print("Register {s} : {}\n", .{decl.name, field});
-
             _ = try self.register_component(field);
         }
     }
@@ -414,7 +446,7 @@ const World = struct {
             try writer.writeAll("\n  Entities");
             for (0.., self.generations.items) |index, ed| {
                 if (ed.index == @as(EntityIndex, @truncate(index))) {
-                    const e = Entity{ .index = ed.index, .generation = ed.generation };
+                    const e = EntityId { .index = ed.index, .generation = ed.generation };
                     try writer.print("\n    {}", .{e});
                     if (ed.immortal)
                         try writer.writeAll("*");
@@ -429,7 +461,7 @@ const World = struct {
                 need_header = false;
             }
             const comp = entry.value_ptr;
-            try writer.print("\n    {} {}", .{ comp.entity, comp.type_info });
+            try writer.print("\n    {} {}", .{ comp.entity_id, comp.type_info });
             for (comp.fields.items) |field|
             {
                 try writer.print("\n      .{s} {}", .{ field.name, field.kind });
