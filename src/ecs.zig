@@ -42,7 +42,7 @@ fn get_component_info (comptime T: type) *TypeInfo(T)
         var ti: TypeInfo(T) = .{};
     }.ti);
 
-    if (tip.initialized == false)
+    if (tip.self != @intFromPtr (tip))
     {
         tip.init ();
     }
@@ -57,7 +57,8 @@ fn TypeInfo (comptime T: type) type
         size: usize = undefined,
         alignment : usize = undefined,
         name: String = undefined,
-        entity_id: EntityId = .{ .index = max_index, .generation = max_generation },
+        label: ?String = null,
+        self: usize = 0,
         fields: std.ArrayListUnmanaged(ComponentField) = .{},
         indexes: std.AutoArrayHashMapUnmanaged(EntityIndex,usize) = .{},
         len: usize = 0,
@@ -195,7 +196,7 @@ const ComponentField = struct {
     offset: usize = 0,
     size: usize = 0,
     array_length: ?usize = null,
-    kind: EntityId = .{},
+    kind: usize = 0,
     value: ?u64 = null,
 };
 
@@ -209,26 +210,26 @@ pub fn init(allocator: std.mem.Allocator) !World {
 
     try string.init(allocator);
 
-    world.null = (try world.register_component(void, null)).id;
-    world.bool = (try world.register_component(bool, null)).id;
-    world.u8 = (try world.register_component(u8, null)).id;
-    world.u8 = (try world.register_component(u8, null)).id;
-    world.u16 = (try world.register_component(u16, null)).id;
-    world.u24 = (try world.register_component(u24, null)).id;
-    world.u32 = (try world.register_component(u32, null)).id;
-    world.u48 = (try world.register_component(u48, null)).id;
-    world.u64 = (try world.register_component(u64, null)).id;
-    world.i8 = (try world.register_component(i8, null)).id;
-    world.i16 = (try world.register_component(i16, null)).id;
-    world.i24 = (try world.register_component(i24, null)).id;
-    world.i32 = (try world.register_component(i32, null)).id;
-    world.i48 = (try world.register_component(i48, null)).id;
-    world.i64 = (try world.register_component(i64, null)).id;
-    world.f32 = (try world.register_component(f32, null)).id;
-    world.f64 = (try world.register_component(f64, null)).id;
-    world.usize = (try world.register_component(usize, null)).id;
-    world.String = (try world.register_component(String, "String")).id;
-    world.EntityId = (try world.register_component(EntityId, "EntityId")).id;
+    world.null = try world.register_component(void, null);
+    world.bool = try world.register_component(bool, null);
+    world.u8 = try world.register_component(u8, null);
+    world.u8 = try world.register_component(u8, null);
+    world.u16 = try world.register_component(u16, null);
+    world.u24 = try world.register_component(u24, null);
+    world.u32 = try world.register_component(u32, null);
+    world.u48 = try world.register_component(u48, null);
+    world.u64 = try world.register_component(u64, null);
+    world.i8 = try world.register_component(i8, null);
+    world.i16 = try world.register_component(i16, null);
+    world.i24 = try world.register_component(i24, null);
+    world.i32 = try world.register_component(i32, null);
+    world.i48 = try world.register_component(i48, null);
+    world.i64 = try world.register_component(i64, null);
+    world.f32 = try world.register_component(f32, null);
+    world.f64 = try world.register_component(f64, null);
+    world.usize = try world.register_component(usize, null);
+    world.String = try world.register_component(String, "String");
+    world.EntityId = try world.register_component(EntityId, "EntityId");
 
     return world;
 }
@@ -278,28 +279,28 @@ pub const World = struct {
     generations: GenerationArray = .{},
     num_deleted: usize = 0,
     next_deleted: EntityIndex = max_index,
-    components: std.AutoArrayHashMapUnmanaged (usize, EntityId) = .{},
+    components: std.AutoArrayHashMapUnmanaged (usize, void) = .{},
     entity_labels: EntityLabels = .{},
 
-    null: EntityId = undefined,
-    bool: EntityId = undefined,
-    u8: EntityId = undefined,
-    u16: EntityId = undefined,
-    u24: EntityId = undefined,
-    u32: EntityId = undefined,
-    u48: EntityId = undefined,
-    u64: EntityId = undefined,
-    i8: EntityId = undefined,
-    i16: EntityId = undefined,
-    i24: EntityId = undefined,
-    i32: EntityId = undefined,
-    i48: EntityId = undefined,
-    i64: EntityId = undefined,
-    f32: EntityId = undefined,
-    f64: EntityId = undefined,
-    usize: EntityId = undefined,
-    String: EntityId = undefined,
-    EntityId: EntityId = undefined,
+    null: usize = undefined,
+    bool: usize = undefined,
+    u8: usize = undefined,
+    u16: usize = undefined,
+    u24: usize = undefined,
+    u32: usize = undefined,
+    u48: usize = undefined,
+    u64: usize = undefined,
+    i8: usize = undefined,
+    i16: usize = undefined,
+    i24: usize = undefined,
+    i32: usize = undefined,
+    i48: usize = undefined,
+    i64: usize = undefined,
+    f32: usize = undefined,
+    f64: usize = undefined,
+    usize: usize = undefined,
+    String: usize = undefined,
+    EntityId: usize = undefined,
 
     ////////////////////////////////////////
 
@@ -407,7 +408,7 @@ pub const World = struct {
         const T = @TypeOf(value);
         const ci = get_component_info (T);
 
-        if (ci.entity_id.index == max_index and ci.entity_id.generation == max_generation)
+        if (ci.self == 0)
         {
             _ = self.register_component (T, null) catch {};
         }
@@ -427,32 +428,41 @@ pub const World = struct {
 
     ////////////////////////////////////////
 
-    pub fn register_component(self: *World, comptime C: type, maybe_name: ?[]const u8) !Entity {
+    pub fn get_type_info (self: World, erased_ptr: usize) ?*TypeInfo(u8)
+    {
+        if (self.components.get (erased_ptr)) |_|
+        {
+            return @ptrFromInt (erased_ptr);
+        }
+        return null;
+    }
+
+    ////////////////////////////////////////
+
+    pub fn register_component(self: *World, comptime C: type, maybe_name: ?[]const u8) !usize {
         const ci = get_component_info (C);
         const erased_ptr = @intFromPtr (ci);
 
         const result = self.components.getOrPut (self.alloc, erased_ptr) catch {
-            return .{ .world = self };
+            return erased_ptr;
         };
 
         if (result.found_existing) {
             if (maybe_name == null) {
-                return .{ .world = self, .id = result.value_ptr.* };
+                return erased_ptr;
             }
             const this_name = intern(maybe_name.?);
-            const existing_name = self.get_label(result.value_ptr.*);
+            const existing_name = ci.label;
 
             if (existing_name != null and !string.eql(existing_name.?, this_name)) {
-                self.set_label(result.value_ptr.*, this_name);
+                ci.label = this_name;
             }
-            return .{ .world = self, .id = result.value_ptr.* };
+            return erased_ptr;
         }
 
-        const entity = self.create_with_immortal(true);
-        const component_name = if (maybe_name == null) intern(@typeName(C)) else intern(maybe_name.?);
+        // const component_name = if (maybe_name == null) intern(@typeName(C)) else intern(maybe_name.?);
 
-        entity.set_label(component_name);
-        result.value_ptr.* = entity.id;
+        // result.value_ptr.* = erased_ptr;
 
         var fields: std.ArrayListUnmanaged(ComponentField) = .{};
 
@@ -461,19 +471,19 @@ pub const World = struct {
                 inline for (struct_type_info.fields) |field| {
                     switch (@typeInfo(field.type)) {
                         .Struct => {
-                            const ent = try self.register_component(field.type, null);
+                            const field_ci = try self.register_component(field.type, null);
                             fields.append(
                                 self.alloc,
                                 .{
                                     .name = intern(field.name),
                                     .offset = @bitOffsetOf(C, field.name),
                                     .size = @bitSizeOf(field.type),
-                                    .kind = ent.id,
+                                    .kind = field_ci,
                                 },
                             ) catch unreachable;
                         },
                         .Array => |arr| {
-                            const ent = try self.register_component(arr.child, null);
+                            const field_ci = try self.register_component(arr.child, null);
                             fields.append(
                                 self.alloc,
                                 .{
@@ -481,12 +491,12 @@ pub const World = struct {
                                     .offset = @bitOffsetOf(C, field.name),
                                     .size = @bitSizeOf(field.type),
                                     .array_length = arr.len,
-                                    .kind = ent.id,
+                                    .kind = field_ci,
                                 },
                             ) catch unreachable;
                         },
                         .Pointer => |ptr| {
-                            const ent = try self.register_component(ptr.child, null);
+                            const field_ci = try self.register_component(ptr.child, null);
                             if (ptr.size == .Slice) {
                                 fields.append(
                                     self.alloc,
@@ -495,7 +505,7 @@ pub const World = struct {
                                         .offset = @bitOffsetOf(C, field.name),
                                         .size = @bitSizeOf(field.type),
                                         .array_length = 0,
-                                        .kind = ent.id,
+                                        .kind = field_ci,
                                     },
                                 ) catch unreachable;
                             } else {
@@ -504,7 +514,7 @@ pub const World = struct {
                             }
                         },
                         .Vector => |vec| {
-                            const ent = try self.register_component(vec.child, null);
+                            const field_ci = try self.register_component(vec.child, null);
                             fields.append(
                                 self.alloc,
                                 .{
@@ -512,31 +522,31 @@ pub const World = struct {
                                     .offset = @bitOffsetOf(C, field.name),
                                     .size = @bitSizeOf(field.type),
                                     .array_length = vec.len,
-                                    .kind = ent.id,
+                                    .kind = field_ci,
                                 },
                             ) catch unreachable;
                         },
                         .Enum => {
-                            const ent = try self.register_component(field.type, null);
+                            const field_ci = try self.register_component(field.type, null);
                             fields.append(
                                 self.alloc,
                                 .{
                                     .name = intern(field.name),
                                     .offset = @bitOffsetOf(C, field.name),
                                     .size = @bitSizeOf(field.type),
-                                    .kind = ent.id,
+                                    .kind = field_ci,
                                 },
                             ) catch unreachable;
                         },
                         else => {
-                            const ent = try self.register_component(field.type, null);
+                            const field_ci = try self.register_component(field.type, null);
                             fields.append(
                                 self.alloc,
                                 .{
                                     .name = intern(field.name),
                                     .offset = @bitOffsetOf(C, field.name),
                                     .size = @bitSizeOf(field.type),
-                                    .kind = ent.id,
+                                    .kind = field_ci,
                                 },
                             ) catch unreachable;
                         },
@@ -558,8 +568,9 @@ pub const World = struct {
         }
 
         ci.fields = fields;
+        ci.self = erased_ptr;
 
-        return .{ .world = self, .id = entity.id };
+        return erased_ptr;
     }
 
     ////////////////////////////////////////
@@ -614,8 +625,50 @@ pub const World = struct {
             const void_ci : *TypeInfo(u8) = @ptrFromInt (com.key_ptr.*);
             if (void_ci.getData (entity.index)) |value|
             {
-                try writer.print ("{} {} {} {any}\n", .{entity, void_ci.name, void_ci.size, value});
+                try writer.print ("{} {} ", .{entity, void_ci.name});
+                try serialize_value (self, void_ci, value, writer);
+                try writer.writeAll ("\n");
             }
+        }
+    }
+
+    ////////////////////////////////////////
+
+    fn serialize_value (self: World, ci: *TypeInfo(u8), value: []const u8, writer: anytype) !void
+    {
+        if (ci.self == self.f32)
+        {
+            const data: *const f32 = @alignCast (@ptrCast (value.ptr));
+            try writer.print ("{d:0.6}", .{data.*});
+        }
+        else if (ci.fields.items.len > 0)
+        {
+            try writer.writeAll ("{");
+            var count : usize = 0;
+            for (ci.fields.items) |field|
+            {
+                if (count > 0) try writer.writeAll (", ");
+
+                const start_index = field.offset / 8;
+                const end_index = start_index + field.size / 8;
+
+                const part = value[start_index .. end_index];
+
+                if (self.get_type_info (field.kind)) |field_ci|
+                {
+                    try self.serialize_value (field_ci, part, writer);
+                }
+                else
+                {
+                    try writer.print ("{any}", .{part});
+                }
+                count += 1;
+            }
+            try writer.writeAll ("}");
+        }
+        else
+        {
+            try writer.print ("{any}", .{value});
         }
     }
 
@@ -648,7 +701,7 @@ pub const World = struct {
         while (component_iterator.next ()) |com|
         {
             const ci : *TypeInfo(void) = @ptrFromInt (com.key_ptr.*);
-            try writer.print ("\n    {} {{{} bytes}} {} {}", .{ci.name, ci.size, com.value_ptr.*, ci.len,});
+            try writer.print ("\n    {} {?'} {{{} bytes}} {} {}", .{ci.name, ci.label, ci.size, com.value_ptr.*, ci.len,});
             for (ci.fields.items) |field| {
                 try writer.print("\n      .{s}", .{field.name});
                 if (field.value) |value| {
@@ -662,13 +715,22 @@ pub const World = struct {
                             try writer.writeAll("[]");
                         }
                     }
-                    if (self.entity_labels.get(field.kind.index)) |label| {
-                        try writer.print("{}", .{label});
-                    } else {
-                        try writer.print("{}", .{field.kind});
+                    if (self.get_type_info (field.kind)) |field_ci|
+                    {
+                        try writer.print("{}", .{field_ci.name});
                     }
                     try writer.print(" ({}:{})", .{ field.offset, field.size });
                 }
+            }
+            var index_iterator = ci.indexes.iterator ();
+            while (index_iterator.next ()) |item|
+            {
+                const ed = self.generations.items[item.key_ptr.*];
+                const entity = EntityId{
+                    .index = ed.index,
+                    .generation = ed.generation,
+                };
+                try writer.print ("\n      {} = {}", .{entity, item.value_ptr.*});
             }
         }
     }

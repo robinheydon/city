@@ -222,7 +222,7 @@ pub fn main() !void {
     }
 
     player.set(Position{ .x = 3, .y = 1 });
-    player.set(Velocity{ .dx = 1, .dy = 1 });
+    player.set(Velocity{ .dx = 1, .dy = -1 });
 
     {
         const pos = player.get(Position);
