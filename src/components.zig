@@ -28,7 +28,6 @@ pub const Position = struct {
 pub const Velocity = struct {
     dx: f32 = 0,
     dy: f32 = 0,
-    dz: f32 = 0,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -183,27 +182,21 @@ pub const DeadPerson = struct {};
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 pub fn register(world: *ecs.World) !void {
-    _ = try world.register_component(Route, "Route");
-    _ = try world.register_component(RouteRequest, "RouteRequest");
-    _ = try world.register_component(Node, "Node");
-    _ = try world.register_component(Link, "Link");
+    // _ = try world.register_component(Route, "Route");
+    // _ = try world.register_component(RouteRequest, "RouteRequest");
+    // _ = try world.register_component(Node, "Node");
+    // _ = try world.register_component(Link, "Link");
     _ = try world.register_component(Position, "Position");
-    _ = try world.register_component(Velocity, "Velocity");
-    _ = try world.register_component(Rotation, "Rotation");
-    _ = try world.register_component(BuildingSize, "BuildingSize");
-    _ = try world.register_component(Model, "Model");
-    _ = try world.register_component(LinkLayout, "LinkLayout");
-    _ = try world.register_component(Lane, "Lane");
-    _ = try world.register_component(LaneKind, "LaneKind");
-    _ = try world.register_component(LaneRestriction, "LandRestriction");
-    _ = try world.register_component(DeadPerson, "DeadPerson");
-    _ = try world.register_component(Person, "Person");
-
-    world.set_sparse_component(RouteRequest);
-    world.set_sparse_component(LinkLayout);
-    world.set_sparse_component(Lane);
-    world.set_sparse_component(LaneKind);
-    world.set_sparse_component(LaneRestriction);
+    // _ = try world.register_component(Velocity, "Velocity");
+    // _ = try world.register_component(Rotation, "Rotation");
+    // _ = try world.register_component(BuildingSize, "BuildingSize");
+    // _ = try world.register_component(Model, "Model");
+    // _ = try world.register_component(LinkLayout, "LinkLayout");
+    // _ = try world.register_component(Lane, "Lane");
+    // _ = try world.register_component(LaneKind, "LaneKind");
+    // _ = try world.register_component(LaneRestriction, "LandRestriction");
+    // _ = try world.register_component(DeadPerson, "DeadPerson");
+    // _ = try world.register_component(Person, "Person");
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

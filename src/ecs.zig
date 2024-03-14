@@ -36,45 +36,113 @@ const EntityGeneration = u8;
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-const TypeInfo = struct {
-    size: usize = 0,
-    alignment: usize = 0,
-    hash: TypeHash = 0,
-    entity_id: EntityId = .{},
+fn get_component_info (comptime T: type) *TypeInfo(T)
+{
+    var tip = &(struct {
+        var ti: TypeInfo(T) = .{};
+    }.ti);
 
-    const TypeHash = u64;
-
-    ////////////////////////////////////////
-
-    inline fn per_type_global_var(comptime T: type) *TypeInfo {
-        _ = T;
-        return &(struct {
-            var ti: TypeInfo = .{};
-        }.ti);
+    if (tip.initialized == false)
+    {
+        tip.init ();
     }
 
-    ////////////////////////////////////////
+    return tip;
+}
 
-    pub fn from(comptime T: type) *TypeInfo {
-        const tip = per_type_global_var(T);
-        if (tip.entity_id.index == max_index and tip.entity_id.generation == max_generation) {
-            tip.* = TypeInfo{
-                .size = @sizeOf(T),
-                .alignment = @alignOf(T),
-                .hash = @intFromPtr(tip),
-                .entity_id = .{},
-            };
+fn TypeInfo (comptime T: type) type
+{
+    return struct {
+        initialized: bool = false,
+        size: usize = undefined,
+        alignment : usize = undefined,
+        name: String = undefined,
+        entity_id: EntityId = .{ .index = max_index, .generation = max_generation },
+        fields: std.ArrayListUnmanaged(ComponentField) = .{},
+        indexes: std.AutoArrayHashMapUnmanaged(EntityIndex,usize) = .{},
+        len: usize = 0,
+        data: std.ArrayListUnmanaged(u8) = .{},
+
+        const Self = @This();
+
+        pub fn init (self: *Self) void
+        {
+            self.initialized = true;
+            self.size = @sizeOf (T);
+            self.alignment = @alignOf (T);
+            self.name = intern (@typeName (T));
         }
-        return tip;
-    }
 
-    ////////////////////////////////////////
+        pub fn deinit (self: *Self) void
+        {
+            _ = self;
+        }
 
-    pub fn lessThan(ctx: void, lhs: *const TypeInfo, rhs: *const TypeInfo) bool {
-        _ = ctx;
-        return lhs.hash < rhs.hash;
-    }
-};
+        fn get_offset (self: Self, index: usize) usize
+        {
+            return index * self.size;
+        }
+
+        fn get_index (self: Self, entity_index: EntityIndex) ?usize
+        {
+            const value = self.indexes.get (entity_index);
+            return value;
+        }
+
+        pub fn set (self: *Self, alloc: std.mem.Allocator, entity_index: EntityIndex, value: T) !void
+        {
+            if (self.get_index (entity_index)) |index|
+            {
+                const offset = self.get_offset (index);
+                const dst = self.data.items[offset..offset+self.size];
+                const src = @as ([*]u8, @ptrFromInt (@intFromPtr (&value)))[0..self.size];
+                @memcpy (dst, src);
+                return;
+            }
+            const src = @as ([*]u8, @ptrFromInt (@intFromPtr (&value)))[0..self.size];
+            const last_len = self.data.items.len;
+
+            try self.data.appendSlice (alloc, src);
+            errdefer self.data.items.len = last_len;
+
+            try self.indexes.put (alloc, entity_index, self.len);
+
+            self.len += 1;
+        }
+
+        pub fn get (self: Self, entity_index: EntityIndex) ?T
+        {
+            if (self.get_index (entity_index)) |index|
+            {
+                const offset = self.get_offset (index);
+                const src = self.data.items[offset..offset+self.size];
+                var value : T = undefined;
+                const dst = @as ([*]u8, @ptrFromInt (@intFromPtr (&value)))[0..self.size];
+                @memcpy (dst, src);
+                return value;
+            }
+            return null;
+        }
+
+        pub fn getData (self: Self, entity_index: EntityIndex) ?[]const u8
+        {
+            if (self.get_index (entity_index)) |index|
+            {
+                const offset = self.get_offset (index);
+                const src = self.data.items[offset..offset+self.size];
+                var value: []u8 = undefined;
+                value = src;
+                return value;
+            }
+            return null;
+        }
+
+        pub fn format (self: Self, _:anytype, _:anytype, writer: anytype) !void
+        {
+            try writer.print ("T({})", .{self.name});
+        }
+    };
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -110,20 +178,11 @@ pub const EntityId = packed struct(u32) {
 const max_index = std.math.maxInt(EntityIndex);
 const max_generation = std.math.maxInt(EntityGeneration);
 const GenerationArray = std.ArrayListUnmanaged(EntityData);
-const ComponentArray = std.AutoArrayHashMapUnmanaged(TypeInfo.TypeHash, ComponentInfo);
 const EntityLabels = std.AutoArrayHashMapUnmanaged(EntityIndex, String);
-const EntityPositions = std.ArrayListUnmanaged(EntityPosition);
 
 ////////////////////////////////////////
 
-const EntityPosition = struct {
-    archetype: *Archetype,
-    index: usize,
-};
-
-////////////////////////////////////////
-
-const EntityData = packed struct {
+const EntityData = struct {
     index: EntityIndex,
     generation: EntityGeneration,
     immortal: bool,
@@ -142,16 +201,6 @@ const ComponentField = struct {
 
 ////////////////////////////////////////
 
-const ComponentInfo = struct {
-    name: String,
-    type_info: *const TypeInfo,
-    entity_id: EntityId,
-    sparse: bool,
-    fields: std.ArrayListUnmanaged(ComponentField) = .{},
-};
-
-////////////////////////////////////////
-
 pub fn init(allocator: std.mem.Allocator) !World {
     var world = World{
         .alloc = allocator,
@@ -160,12 +209,9 @@ pub fn init(allocator: std.mem.Allocator) !World {
 
     try string.init(allocator);
 
-    const empty: ComponentList = .{};
-
-    world.void_archetype = world.add_archetype(empty).?;
-
     world.null = (try world.register_component(void, null)).id;
     world.bool = (try world.register_component(bool, null)).id;
+    world.u8 = (try world.register_component(u8, null)).id;
     world.u8 = (try world.register_component(u8, null)).id;
     world.u16 = (try world.register_component(u16, null)).id;
     world.u24 = (try world.register_component(u24, null)).id;
@@ -181,8 +227,8 @@ pub fn init(allocator: std.mem.Allocator) !World {
     world.f32 = (try world.register_component(f32, null)).id;
     world.f64 = (try world.register_component(f64, null)).id;
     world.usize = (try world.register_component(usize, null)).id;
-    world.String = (try world.register_component(String, null)).id;
-    world.EntityId = (try world.register_component(EntityId, null)).id;
+    world.String = (try world.register_component(String, "String")).id;
+    world.EntityId = (try world.register_component(EntityId, "EntityId")).id;
 
     return world;
 }
@@ -212,16 +258,7 @@ pub const Entity = struct {
     }
 
     pub fn get(self: Entity, comptime T: type) ?T {
-        const type_info = TypeInfo.from(T);
-        if (self.world.get_label (type_info.entity_id)) |label|
-        {
-        std.debug.print("get {} {}\n", .{ self.id, label});
-        }
-        else
-        {
-        std.debug.print("get {} {}\n", .{ self.id, type_info.entity_id });
-        }
-        return null;
+        return self.world.get (self.id, T);
     }
 
     pub fn format(self: Entity, _: []const u8, _: anytype, writer: anytype) !void {
@@ -236,100 +273,13 @@ pub const Entity = struct {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn hash_component_list(list: ComponentList) ArchetypeHash {
-    var hasher = std.hash.Wyhash.init(0);
-
-    for (list.get_slice()) |item| {
-        const data = @as ([*]u8, @ptrFromInt (@intFromPtr (&item.index)))[0..3];
-        hasher.update(data);
-    }
-
-    return hasher.final();
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-const ComponentList = struct {
-    num: usize = 0,
-    items: [max_components_per_archetype]EntityId = undefined,
-
-    pub fn add(self: *ComponentList, entity: EntityId) void {
-        for (0..self.num) |index| {
-            if (self.items[index].index == entity.index) {
-                return;
-            }
-        }
-        if (self.num < max_components_per_archetype) {
-            self.items[self.num] = entity;
-            self.num += 1;
-        }
-    }
-
-    pub fn remove(self: *ComponentList, entity: EntityId) void {
-        for (0..self.num) |index| {
-            if (self.items[index].index == entity.index) {
-                if (index < self.num - 1)
-                {
-                    self.items[index] = self.items[self.num-1];
-                }
-                self.num -= 1;
-                return;
-            }
-        }
-    }
-
-    pub fn sort (self: *ComponentList) void {
-        std.sort.pdq (EntityId, self.items[0..self.num], {}, EntityId.less_than);
-    }
-
-    pub fn get_slice(self: ComponentList) []const EntityId {
-        return self.items[0..self.num];
-    }
-
-    pub fn format(self: ComponentList, _: anytype, _: anytype, writer: anytype) !void {
-        try writer.writeAll("[");
-        var count : usize = 0;
-        for (self.items[0..self.num]) |item| {
-            if (count > 0) {
-                try writer.writeAll (",");
-            }
-            try writer.print("{}", .{item});
-            count += 1;
-        }
-        try writer.writeAll("]");
-    }
-};
-
-const max_components_per_archetype = 32;
-
-pub const Archetype = struct {
-    name: String,
-    components: ComponentList = .{},
-
-    pub fn format(self: Archetype, _: anytype, _: anytype, writer: anytype) !void {
-        try writer.print("{}", .{self.name});
-    }
-};
-
-pub const ArchetypeHash = u64;
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-
 pub const World = struct {
     alloc: std.mem.Allocator,
     generations: GenerationArray = .{},
     num_deleted: usize = 0,
     next_deleted: EntityIndex = max_index,
-    components: ComponentArray = .{},
+    components: std.AutoArrayHashMapUnmanaged (usize, EntityId) = .{},
     entity_labels: EntityLabels = .{},
-
-    archetypes: std.AutoArrayHashMapUnmanaged(ArchetypeHash, *Archetype) = .{},
-    void_archetype: *Archetype = undefined,
-    positions: EntityPositions = .{},
 
     null: EntityId = undefined,
     bool: EntityId = undefined,
@@ -355,7 +305,6 @@ pub const World = struct {
 
     pub fn deinit(self: *World) void {
         self.generations.deinit(self.alloc);
-        self.positions.deinit(self.alloc);
         self.components.deinit(self.alloc);
         string.deinit();
     }
@@ -373,7 +322,6 @@ pub const World = struct {
                 .id = .{ .index = index, .generation = old_e.generation },
             };
             self.generations.items[index] = EntityData{ .index = new_e.id.index, .generation = new_e.id.generation, .immortal = immortal };
-            self.positions.items[index] = .{ .archetype = self.void_archetype, .index = 0 };
             return new_e;
         } else {
             const index = self.generations.items.len;
@@ -382,12 +330,6 @@ pub const World = struct {
                 const ed = EntityData{ .index = @truncate(index), .generation = 0, .immortal = immortal };
                 self.generations.append(self.alloc, ed) catch |err| {
                     std.log.err("Cannot extent generations array {}", .{err});
-                    return .{ .world = self, .id = .{} };
-                };
-
-                const position = EntityPosition{ .archetype = self.void_archetype, .index = 0 };
-                self.positions.append(self.alloc, position) catch |err| {
-                    std.log.err("Cannot extend entity positions array {}", .{err});
                     return .{ .world = self, .id = .{} };
                 };
 
@@ -449,8 +391,8 @@ pub const World = struct {
                 next_generation = 0;
             }
 
-            const de = EntityData{ .index = self.next_deleted, .generation = next_generation, .immortal = false };
-            self.generations.items[entity.index] = de;
+            const ed = EntityData{ .index = self.next_deleted, .generation = next_generation, .immortal = false };
+            self.generations.items[entity.index] = ed;
             self.next_deleted = entity.index;
             self.num_deleted += 1;
             _ = self.entity_labels.remove(entity.index);
@@ -460,103 +402,57 @@ pub const World = struct {
     ////////////////////////////////////////
 
     pub fn set(self: *World, entity: EntityId, comptime value: anytype) void {
-        if (!self.valid_entity(entity)) {
-            return;
-        }
+        if (!self.valid_entity(entity)) return;
 
         const T = @TypeOf(value);
-        const type_info = TypeInfo.from(T);
+        const ci = get_component_info (T);
 
-        const current_position = self.positions.items[entity.index];
-        const current_archetype = current_position.archetype;
-        const current_components = current_archetype.components;
-
-        var components: ComponentList = current_components;
-
-        components.add(type_info.entity_id);
-        components.sort();
-
-        if (self.add_archetype (components)) |new_archetype| {
-            self.positions.items[entity.index].archetype = new_archetype;
-        }
-    }
-
-    ////////////////////////////////////////
-
-    pub fn add_archetype(self: *World, components: ComponentList) ?*Archetype {
-        const hash = hash_component_list(components);
-
-        if (self.archetypes.get(hash)) |existing_archetype| {
-            return existing_archetype;
-        }
-
-        const new_arch = self.alloc.create(Archetype) catch return null;
-        errdefer self.alloc.destroy(new_arch);
-
-        var buffer = std.ArrayList(u8).init(self.alloc);
-        defer buffer.deinit();
-        var writer = buffer.writer();
-
-        writer.writeAll ("[") catch return null;
-        var count: usize = 0;
-        for (components.items[0..components.num]) |item|
+        if (ci.entity_id.index == max_index and ci.entity_id.generation == max_generation)
         {
-            if (count > 0) {
-                writer.writeAll (",") catch return null;
-            }
-            if (self.get_label(item)) |label| {
-                writer.print("{}", .{label}) catch return null;
-            } else {
-                writer.print ("{}", .{item}) catch return null;
-            }
-            count += 1;
+            _ = self.register_component (T, null) catch {};
         }
-        writer.writeAll ("]") catch return null;
 
-        new_arch.* = .{
-            .name = intern(buffer.items),
-            .components = components,
-        };
-
-        self.archetypes.put(self.alloc, hash, new_arch) catch return null;
-        return new_arch;
+        ci.set (self.alloc, entity.index, value) catch {};
     }
 
     ////////////////////////////////////////
 
-    pub fn register_component(self: *World, comptime C: type, name: ?[]const u8) !Entity {
-        var type_info = TypeInfo.from(C);
+    pub fn get (self: *World, entity: EntityId, comptime T: type) ?T {
+        if (!self.valid_entity(entity)) return null;
 
-        var result = self.components.getOrPut(self.alloc, type_info.hash) catch {
+        const ci = get_component_info (T);
+
+        return ci.get (entity.index);
+    }
+
+    ////////////////////////////////////////
+
+    pub fn register_component(self: *World, comptime C: type, maybe_name: ?[]const u8) !Entity {
+        const ci = get_component_info (C);
+        const erased_ptr = @intFromPtr (ci);
+
+        const result = self.components.getOrPut (self.alloc, erased_ptr) catch {
             return .{ .world = self };
         };
 
         if (result.found_existing) {
-            if (name == null) {
-                return .{ .world = self, .id = result.value_ptr.entity_id };
+            if (maybe_name == null) {
+                return .{ .world = self, .id = result.value_ptr.* };
             }
-            const this_name = intern(name.?);
-            const existing_name = self.get_label(result.value_ptr.entity_id);
+            const this_name = intern(maybe_name.?);
+            const existing_name = self.get_label(result.value_ptr.*);
 
             if (existing_name != null and !string.eql(existing_name.?, this_name)) {
-                self.set_label(result.value_ptr.entity_id, this_name);
+                self.set_label(result.value_ptr.*, this_name);
             }
-            return .{ .world = self, .id = result.value_ptr.entity_id };
+            return .{ .world = self, .id = result.value_ptr.* };
         }
 
         const entity = self.create_with_immortal(true);
-        const component_name = if (name == null) intern(@typeName(C)) else intern(name.?);
-
-        type_info.entity_id = entity.id;
-
-        result.value_ptr.* = .{
-            .name = component_name,
-            .type_info = type_info,
-            .sparse = false,
-            .entity_id = entity.id,
-        };
+        const component_name = if (maybe_name == null) intern(@typeName(C)) else intern(maybe_name.?);
 
         entity.set_label(component_name);
+        result.value_ptr.* = entity.id;
 
         var fields: std.ArrayListUnmanaged(ComponentField) = .{};
 
@@ -661,23 +557,9 @@ pub const World = struct {
             else => {},
         }
 
-        result = self.components.getOrPut(self.alloc, type_info.hash) catch {
-            return entity;
-        };
+        ci.fields = fields;
 
-        result.value_ptr.fields = fields;
-
-        return entity;
-    }
-
-    ////////////////////////////////////////
-
-    pub fn set_sparse_component(self: World, comptime C: type) void {
-        const type_info = TypeInfo.from(C);
-
-        if (self.components.getPtr(type_info.hash)) |component| {
-            component.sparse = true;
-        }
+        return .{ .world = self, .id = entity.id };
     }
 
     ////////////////////////////////////////
@@ -689,12 +571,62 @@ pub const World = struct {
 
     ////////////////////////////////////////
 
+    pub fn serialize (self: World, writer: anytype) !void
+    {
+        try writer.writeAll ("Serialize {\n");
+
+        try self.serialize_entities (writer);
+
+        try writer.writeAll ("}\n");
+    }
+
+    ////////////////////////////////////////
+
+    fn serialize_entities (self: World, writer: anytype) !void
+    {
+        for (0.., self.generations.items) |index, ed| {
+            if (ed.index == @as(EntityIndex, @truncate(index))) {
+                const entity = EntityId{
+                    .index = ed.index,
+                    .generation = ed.generation,
+                };
+                // try writer.print("Entity: {}", .{entity});
+                // if (self.entity_labels.get(entity.index)) |label| {
+                    // try writer.print(" {'}", .{label});
+                // }
+                // if (ed.immortal) {
+                    // try writer.writeAll(" (immortal)");
+                // }
+                // try writer.writeAll("\n");
+
+                try serialize_entity_components (self, entity, writer);
+            }
+        }
+    }
+
+    ////////////////////////////////////////
+
+    fn serialize_entity_components (self: World, entity: EntityId, writer: anytype) !void
+    {
+        var component_iterator = self.components.iterator ();
+        while (component_iterator.next ()) |com|
+        {
+            const void_ci : *TypeInfo(u8) = @ptrFromInt (com.key_ptr.*);
+            if (void_ci.getData (entity.index)) |value|
+            {
+                try writer.print ("{} {} {} {any}\n", .{entity, void_ci.name, void_ci.size, value});
+            }
+        }
+    }
+
+    ////////////////////////////////////////
+
     pub fn format(self: World, fmt: []const u8, opt: anytype, writer: anytype) !void {
         _ = fmt;
         _ = opt;
         try writer.writeAll("World");
+        try writer.print("\n  Entities {}", .{self.generations.items.len});
         if (self.generations.items.len > 0) {
-            try writer.writeAll("\n  Entities");
             for (0.., self.generations.items) |index, ed| {
                 if (ed.index == @as(EntityIndex, @truncate(index))) {
                     const e = EntityId{
@@ -709,30 +641,15 @@ pub const World = struct {
                         try writer.writeAll(" (immortal)");
                     }
                 }
-                const position = self.positions.items[index];
-                try writer.print(" {}.{}", .{ position.archetype.name, position.index });
             }
         }
-        var component_iterator = self.components.iterator();
-        var need_header = true;
-        while (component_iterator.next()) |entry| {
-            if (need_header) {
-                try writer.writeAll("\n  Components");
-                need_header = false;
-            }
-            const comp = entry.value_ptr;
-            try writer.print("\n    {}", .{comp.entity_id});
-            if (self.entity_labels.get(comp.entity_id.index)) |label| {
-                try writer.print(" {'}", .{label});
-            } else {
-                try writer.print(" {}", .{comp.type_info});
-            }
-            try writer.print(" ({})", .{comp.type_info.size});
-            if (comp.sparse) {
-                try writer.writeAll(" (sparse)");
-            }
-
-            for (comp.fields.items) |field| {
+        try writer.print("\n  Components {}", .{self.components.count ()});
+        var component_iterator = self.components.iterator ();
+        while (component_iterator.next ()) |com|
+        {
+            const ci : *TypeInfo(void) = @ptrFromInt (com.key_ptr.*);
+            try writer.print ("\n    {} {{{} bytes}} {} {}", .{ci.name, ci.size, com.value_ptr.*, ci.len,});
+            for (ci.fields.items) |field| {
                 try writer.print("\n      .{s}", .{field.name});
                 if (field.value) |value| {
                     try writer.print(" = {}", .{value});
@@ -753,14 +670,6 @@ pub const World = struct {
                     try writer.print(" ({}:{})", .{ field.offset, field.size });
                 }
             }
-        }
-        try writer.writeAll("\n  Archetypes");
-        var archetype_iterator = self.archetypes.iterator();
-        var index: usize = 0;
-        while (archetype_iterator.next()) |item| : (index += 1) {
-            const hash = item.key_ptr.*;
-            const name = item.value_ptr.*.name;
-            try writer.print("\n    {d}: {x:0>16} {}", .{ index, hash, name });
         }
     }
 };

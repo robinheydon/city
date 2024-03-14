@@ -82,8 +82,8 @@ pub fn dump(writer: anytype) !void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 pub const String = packed struct {
-    index: u32,
-    len: u32,
+    index: u32 = 0,
+    len: u32 = 0,
 
     pub fn get(self: String) []const u8 {
         const index = self.index;
