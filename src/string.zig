@@ -111,6 +111,10 @@ pub const String = packed struct {
         };
     }
 
+    pub fn serialize(alloc: std.mem.Allocator, self: *String) error{OutOfMemory}![]const u8 {
+        return std.fmt.allocPrint(alloc, "[{}]{'}", .{ self.len, self });
+    }
+
     pub fn format(self: String, fmt: anytype, _: anytype, writer: anytype) !void {
         var use_single_quotes = false;
         var use_double_quotes = false;

@@ -48,6 +48,8 @@ fn get_component_info(comptime T: type) *TypeInfo(T) {
     return tip;
 }
 
+const SerializeErrors = error{OutOfMemory};
+
 fn TypeInfo(comptime T: type) type {
     return struct {
         initialized: bool = false,
@@ -60,6 +62,7 @@ fn TypeInfo(comptime T: type) type {
         indexes: std.AutoArrayHashMapUnmanaged(EntityIndex, usize) = .{},
         len: usize = 0,
         data: std.ArrayListUnmanaged(u8) = .{},
+        serialize: ?*const fn (alloc: std.mem.Allocator, data: *T) SerializeErrors![]const u8 = null,
 
         const Self = @This();
 
@@ -152,6 +155,12 @@ pub const EntityId = packed struct(u32) {
     pub fn less_than(ctx: void, lhs: EntityId, rhs: EntityId) bool {
         _ = ctx;
         return lhs.index < rhs.index;
+    }
+
+    ////////////////////////////////////////
+
+    pub fn serialize(alloc: std.mem.Allocator, self: *EntityId) SerializeErrors![]const u8 {
+        return std.fmt.allocPrint(alloc, "{}", .{self});
     }
 
     ////////////////////////////////////////
@@ -249,6 +258,10 @@ pub const Entity = struct {
 
     pub fn set(self: Entity, comptime value: anytype) void {
         self.world.set(self.id, value);
+    }
+
+    pub fn set_component(self: Entity, comptime T: type, value: anytype) void {
+        self.world.set_component(self.id, T, value);
     }
 
     pub fn get(self: Entity, comptime T: type) ?T {
@@ -404,6 +417,16 @@ pub const World = struct {
             std.debug.print("Cannot set_kind without registered component type", .{});
             return;
         }
+    }
+
+    ////////////////////////////////////////
+
+    pub fn set_component(self: *World, entity: EntityId, comptime T: type, value: T) void {
+        const ci = get_component_info(T);
+        if (ci.self == 0) {
+            _ = self.register_component(T, null) catch {};
+        }
+        ci.set(self.alloc, entity.index, value) catch {};
     }
 
     ////////////////////////////////////////
@@ -572,6 +595,10 @@ pub const World = struct {
             ci.label = intern(name);
         }
 
+        if (std.meta.hasFn(C, "serialize")) {
+            ci.serialize = @field(C, "serialize");
+        }
+
         return erased_ptr;
     }
 
@@ -602,9 +629,7 @@ pub const World = struct {
                     .generation = ed.generation,
                 };
 
-                try writer.writeAll("{\n");
                 try serialize_entity_components(self, entity, writer);
-                try writer.writeAll("}\n");
             }
         }
     }
@@ -618,7 +643,7 @@ pub const World = struct {
             if (void_ci.get_data(entity.index)) |value| {
                 try writer.print("{} {} ", .{ entity, void_ci.name });
                 try serialize_value(self, void_ci, value, writer);
-                try writer.writeAll("\n");
+                try writer.writeAll(";\n");
             }
         }
     }
@@ -626,7 +651,13 @@ pub const World = struct {
     ////////////////////////////////////////
 
     fn serialize_value(self: World, ci: *TypeInfo(u8), value: []const u8, writer: anytype) !void {
-        if (ci.self == self.f32) {
+        if (ci.size == 0) {
+            try writer.writeAll("{}");
+        } else if (ci.serialize) |serialize_func| {
+            const block = try serialize_func(self.alloc, @constCast(@ptrCast(value)));
+            try writer.writeAll(block);
+            self.alloc.free(block);
+        } else if (ci.self == self.f32) {
             const data: *const f32 = @alignCast(@ptrCast(value.ptr));
             try writer.print("{d:0.6}", .{data.*});
         } else if (ci.self == self.String) {
@@ -644,6 +675,7 @@ pub const World = struct {
                 const part = value[start_index..end_index];
 
                 if (self.get_type_info(field.kind)) |field_ci| {
+                    try writer.print(".{s}=", .{field.name});
                     try self.serialize_value(field_ci, part, writer);
                 } else {
                     try writer.print("{any}", .{part});
@@ -688,11 +720,7 @@ pub const World = struct {
             if (ci.label) |label| {
                 try writer.print(" {'}", .{label});
             }
-            try writer.print(" {{{} bytes}} {} {}", .{
-                ci.size,
-                com.value_ptr.*,
-                ci.len,
-            });
+            try writer.print(" {{{} bytes}}", .{ci.size});
             for (ci.fields.items) |field| {
                 try writer.print("\n      .{s}", .{field.name});
                 if (field.value) |value| {

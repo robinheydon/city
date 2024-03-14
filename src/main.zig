@@ -36,6 +36,11 @@ const Mesh = gfx.Mesh(gfx.Vertex);
 const components = @import("components.zig");
 const Position = components.Position;
 const Velocity = components.Velocity;
+const Person = components.Person;
+const DeadPerson = components.DeadPerson;
+const RouteRequest = components.RouteRequest;
+const BuildingSize = components.BuildingSize;
+const Owner = components.Owner;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -162,12 +167,29 @@ pub fn main() !void {
     try components.register(&world);
 
     const player = world.create();
-    player.set_label(intern("Player"));
+    player.set_label(intern("Player's one"));
     player.set(Position{ .x = 4, .y = 1 });
+    player.set(Velocity{ .dx = 1 });
+    player.set(Person{});
 
     const other = world.create();
     other.set_label(intern("Other"));
     other.set(Position{ .x = 2, .y = 3 });
+    other.set(DeadPerson{});
+
+    const building = world.create();
+    building.set_label(intern("Building"));
+    building.set(Position{ .x = 8, .y = 0 });
+    building.set(BuildingSize{ .x = 7, .y = 12, .z = 9 });
+    building.set_component(Owner, .{ .owner = player.id });
+
+    const rr = world.create();
+    const route_req = RouteRequest{
+        .entity = player.id,
+        .source = building.id,
+        .destination = other.id,
+    };
+    rr.set_component(RouteRequest, route_req);
 
     var buffer = std.ArrayList(u8).init(state.allocator);
     defer buffer.deinit();
