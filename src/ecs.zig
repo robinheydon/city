@@ -36,101 +36,96 @@ const EntityGeneration = u8;
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-fn get_component_info (comptime T: type) *TypeInfo(T)
-{
+fn get_component_info(comptime T: type) *TypeInfo(T) {
     var tip = &(struct {
         var ti: TypeInfo(T) = .{};
     }.ti);
 
-    if (tip.self != @intFromPtr (tip))
-    {
-        tip.init ();
+    if (tip.self != @intFromPtr(tip)) {
+        tip.init();
     }
 
     return tip;
 }
 
-fn TypeInfo (comptime T: type) type
-{
+fn TypeInfo(comptime T: type) type {
     return struct {
         initialized: bool = false,
         size: usize = undefined,
-        alignment : usize = undefined,
+        alignment: usize = undefined,
         name: String = undefined,
         label: ?String = null,
         self: usize = 0,
         fields: std.ArrayListUnmanaged(ComponentField) = .{},
-        indexes: std.AutoArrayHashMapUnmanaged(EntityIndex,usize) = .{},
+        indexes: std.AutoArrayHashMapUnmanaged(EntityIndex, usize) = .{},
         len: usize = 0,
         data: std.ArrayListUnmanaged(u8) = .{},
 
         const Self = @This();
 
-        pub fn init (self: *Self) void
-        {
+        pub fn init(self: *Self) void {
             self.initialized = true;
-            self.size = @sizeOf (T);
-            self.alignment = @alignOf (T);
-            self.name = intern (@typeName (T));
+            self.size = @sizeOf(T);
+            self.alignment = @alignOf(T);
+            self.name = intern(@typeName(T));
         }
 
-        pub fn deinit (self: *Self) void
-        {
+        pub fn deinit(self: *Self) void {
             _ = self;
         }
 
-        fn get_offset (self: Self, index: usize) usize
-        {
+        fn get_offset(self: Self, index: usize) usize {
             return index * self.size;
         }
 
-        fn get_index (self: Self, entity_index: EntityIndex) ?usize
-        {
-            const value = self.indexes.get (entity_index);
+        fn get_index(self: Self, entity_index: EntityIndex) ?usize {
+            const value = self.indexes.get(entity_index);
             return value;
         }
 
-        pub fn set (self: *Self, alloc: std.mem.Allocator, entity_index: EntityIndex, value: T) !void
-        {
-            if (self.get_index (entity_index)) |index|
-            {
-                const offset = self.get_offset (index);
-                const dst = self.data.items[offset..offset+self.size];
-                const src = @as ([*]u8, @ptrFromInt (@intFromPtr (&value)))[0..self.size];
-                @memcpy (dst, src);
+        pub fn set(self: *Self, alloc: std.mem.Allocator, entity_index: EntityIndex, value: T) !void {
+            const src = @as([*]const u8, @ptrFromInt(@intFromPtr(&value)));
+            try self.set_data(alloc, entity_index, src);
+        }
+
+        pub fn set_data(
+            self: *Self,
+            alloc: std.mem.Allocator,
+            entity_index: EntityIndex,
+            data: [*]const u8,
+        ) !void {
+            if (self.get_index(entity_index)) |index| {
+                const offset = self.get_offset(index);
+                const dst = self.data.items[offset .. offset + self.size];
+                @memcpy(dst, data);
                 return;
             }
-            const src = @as ([*]u8, @ptrFromInt (@intFromPtr (&value)))[0..self.size];
             const last_len = self.data.items.len;
 
-            try self.data.appendSlice (alloc, src);
+            try self.data.appendSlice(alloc, data[0..self.size]);
             errdefer self.data.items.len = last_len;
 
-            try self.indexes.put (alloc, entity_index, self.len);
+            try self.indexes.put(alloc, entity_index, self.len);
 
             self.len += 1;
         }
 
-        pub fn get (self: Self, entity_index: EntityIndex) ?T
-        {
-            if (self.get_index (entity_index)) |index|
-            {
-                const offset = self.get_offset (index);
-                const src = self.data.items[offset..offset+self.size];
-                var value : T = undefined;
-                const dst = @as ([*]u8, @ptrFromInt (@intFromPtr (&value)))[0..self.size];
-                @memcpy (dst, src);
+        pub fn get(self: Self, entity_index: EntityIndex) ?T {
+            if (self.get_index(entity_index)) |index| {
+                const offset = self.get_offset(index);
+                const src = self.data.items[offset .. offset + self.size];
+                var value: T = undefined;
+                const dst = @as([*]u8, @ptrFromInt(@intFromPtr(&value)))[0..self.size];
+                @memcpy(dst, src);
                 return value;
             }
             return null;
         }
 
-        pub fn getData (self: Self, entity_index: EntityIndex) ?[]const u8
-        {
-            if (self.get_index (entity_index)) |index|
-            {
-                const offset = self.get_offset (index);
-                const src = self.data.items[offset..offset+self.size];
+        pub fn get_data(self: Self, entity_index: EntityIndex) ?[]const u8 {
+            if (self.get_index(entity_index)) |index| {
+                const offset = self.get_offset(index);
+                const src = self.data.items[offset .. offset + self.size];
                 var value: []u8 = undefined;
                 value = src;
                 return value;
@@ -138,9 +133,8 @@ fn TypeInfo (comptime T: type) type
             return null;
         }
 
-        pub fn format (self: Self, _:anytype, _:anytype, writer: anytype) !void
-        {
-            try writer.print ("T({})", .{self.name});
+        pub fn format(self: Self, _: anytype, _: anytype, writer: anytype) !void {
+            try writer.print("T({})", .{self.name});
         }
     };
 }
@@ -179,7 +173,6 @@ pub const EntityId = packed struct(u32) {
 const max_index = std.math.maxInt(EntityIndex);
 const max_generation = std.math.maxInt(EntityGeneration);
 const GenerationArray = std.ArrayListUnmanaged(EntityData);
-const EntityLabels = std.AutoArrayHashMapUnmanaged(EntityIndex, String);
 
 ////////////////////////////////////////
 
@@ -259,7 +252,7 @@ pub const Entity = struct {
     }
 
     pub fn get(self: Entity, comptime T: type) ?T {
-        return self.world.get (self.id, T);
+        return self.world.get(self.id, T);
     }
 
     pub fn format(self: Entity, _: []const u8, _: anytype, writer: anytype) !void {
@@ -279,8 +272,7 @@ pub const World = struct {
     generations: GenerationArray = .{},
     num_deleted: usize = 0,
     next_deleted: EntityIndex = max_index,
-    components: std.AutoArrayHashMapUnmanaged (usize, void) = .{},
-    entity_labels: EntityLabels = .{},
+    components: std.AutoArrayHashMapUnmanaged(usize, void) = .{},
 
     null: usize = undefined,
     bool: usize = undefined,
@@ -370,15 +362,17 @@ pub const World = struct {
 
     ////////////////////////////////////////
 
-    pub fn set_label(self: *World, entity: EntityId, label: String) void {
-        self.entity_labels.put(self.alloc, entity.index, label) catch {};
+    pub fn set_label(self: *World, entity_id: EntityId, label: String) void {
+        self.set_kind(entity_id, self.String, @constCast(@ptrCast(&label)));
     }
 
     ////////////////////////////////////////
 
-    pub fn get_label(self: World, entity: EntityId) ?String {
-        if (self.valid_entity(entity)) {
-            return self.entity_labels.get(entity.index);
+    pub fn get_label(self: World, entity_id: EntityId) ?String {
+        if (self.valid_entity(entity_id)) {
+            if (self.get(entity_id, String)) |str| {
+                return str;
+            }
         }
         return null;
     }
@@ -396,7 +390,19 @@ pub const World = struct {
             self.generations.items[entity.index] = ed;
             self.next_deleted = entity.index;
             self.num_deleted += 1;
-            _ = self.entity_labels.remove(entity.index);
+        }
+    }
+
+    ////////////////////////////////////////
+
+    pub fn set_kind(self: *World, entity: EntityId, kind: usize, value: [*]const u8) void {
+        if (!self.valid_entity(entity)) return;
+
+        if (self.get_type_info(kind)) |ci| {
+            ci.set_data(self.alloc, entity.index, value) catch {};
+        } else {
+            std.debug.print("Cannot set_kind without registered component type", .{});
+            return;
         }
     }
 
@@ -406,33 +412,30 @@ pub const World = struct {
         if (!self.valid_entity(entity)) return;
 
         const T = @TypeOf(value);
-        const ci = get_component_info (T);
+        const ci = get_component_info(T);
 
-        if (ci.self == 0)
-        {
-            _ = self.register_component (T, null) catch {};
+        if (ci.self == 0) {
+            _ = self.register_component(T, null) catch {};
         }
 
-        ci.set (self.alloc, entity.index, value) catch {};
+        ci.set(self.alloc, entity.index, value) catch {};
     }
 
     ////////////////////////////////////////
 
-    pub fn get (self: *World, entity: EntityId, comptime T: type) ?T {
+    pub fn get(self: World, entity: EntityId, comptime T: type) ?T {
         if (!self.valid_entity(entity)) return null;
 
-        const ci = get_component_info (T);
+        const ci = get_component_info(T);
 
-        return ci.get (entity.index);
+        return ci.get(entity.index);
     }
 
     ////////////////////////////////////////
 
-    pub fn get_type_info (self: World, erased_ptr: usize) ?*TypeInfo(u8)
-    {
-        if (self.components.get (erased_ptr)) |_|
-        {
-            return @ptrFromInt (erased_ptr);
+    pub fn get_type_info(self: World, erased_ptr: usize) ?*TypeInfo(u8) {
+        if (self.components.get(erased_ptr)) |_| {
+            return @ptrFromInt(erased_ptr);
         }
         return null;
     }
@@ -440,10 +443,10 @@ pub const World = struct {
     ////////////////////////////////////////
 
     pub fn register_component(self: *World, comptime C: type, maybe_name: ?[]const u8) !usize {
-        const ci = get_component_info (C);
-        const erased_ptr = @intFromPtr (ci);
+        const ci = get_component_info(C);
+        const erased_ptr = @intFromPtr(ci);
 
-        const result = self.components.getOrPut (self.alloc, erased_ptr) catch {
+        const result = self.components.getOrPut(self.alloc, erased_ptr) catch {
             return erased_ptr;
         };
 
@@ -459,10 +462,6 @@ pub const World = struct {
             }
             return erased_ptr;
         }
-
-        // const component_name = if (maybe_name == null) intern(@typeName(C)) else intern(maybe_name.?);
-
-        // result.value_ptr.* = erased_ptr;
 
         var fields: std.ArrayListUnmanaged(ComponentField) = .{};
 
@@ -569,6 +568,9 @@ pub const World = struct {
 
         ci.fields = fields;
         ci.self = erased_ptr;
+        if (maybe_name) |name| {
+            ci.label = intern(name);
+        }
 
         return erased_ptr;
     }
@@ -582,93 +584,75 @@ pub const World = struct {
 
     ////////////////////////////////////////
 
-    pub fn serialize (self: World, writer: anytype) !void
-    {
-        try writer.writeAll ("Serialize {\n");
+    pub fn serialize(self: World, writer: anytype) !void {
+        try writer.writeAll("Serialize {\n");
 
-        try self.serialize_entities (writer);
+        try self.serialize_entities(writer);
 
-        try writer.writeAll ("}\n");
+        try writer.writeAll("}\n");
     }
 
     ////////////////////////////////////////
 
-    fn serialize_entities (self: World, writer: anytype) !void
-    {
+    fn serialize_entities(self: World, writer: anytype) !void {
         for (0.., self.generations.items) |index, ed| {
             if (ed.index == @as(EntityIndex, @truncate(index))) {
                 const entity = EntityId{
                     .index = ed.index,
                     .generation = ed.generation,
                 };
-                // try writer.print("Entity: {}", .{entity});
-                // if (self.entity_labels.get(entity.index)) |label| {
-                    // try writer.print(" {'}", .{label});
-                // }
-                // if (ed.immortal) {
-                    // try writer.writeAll(" (immortal)");
-                // }
-                // try writer.writeAll("\n");
 
-                try serialize_entity_components (self, entity, writer);
+                try writer.writeAll("{\n");
+                try serialize_entity_components(self, entity, writer);
+                try writer.writeAll("}\n");
             }
         }
     }
 
     ////////////////////////////////////////
 
-    fn serialize_entity_components (self: World, entity: EntityId, writer: anytype) !void
-    {
-        var component_iterator = self.components.iterator ();
-        while (component_iterator.next ()) |com|
-        {
-            const void_ci : *TypeInfo(u8) = @ptrFromInt (com.key_ptr.*);
-            if (void_ci.getData (entity.index)) |value|
-            {
-                try writer.print ("{} {} ", .{entity, void_ci.name});
-                try serialize_value (self, void_ci, value, writer);
-                try writer.writeAll ("\n");
+    fn serialize_entity_components(self: World, entity: EntityId, writer: anytype) !void {
+        var component_iterator = self.components.iterator();
+        while (component_iterator.next()) |com| {
+            const void_ci: *TypeInfo(u8) = @ptrFromInt(com.key_ptr.*);
+            if (void_ci.get_data(entity.index)) |value| {
+                try writer.print("{} {} ", .{ entity, void_ci.name });
+                try serialize_value(self, void_ci, value, writer);
+                try writer.writeAll("\n");
             }
         }
     }
 
     ////////////////////////////////////////
 
-    fn serialize_value (self: World, ci: *TypeInfo(u8), value: []const u8, writer: anytype) !void
-    {
-        if (ci.self == self.f32)
-        {
-            const data: *const f32 = @alignCast (@ptrCast (value.ptr));
-            try writer.print ("{d:0.6}", .{data.*});
-        }
-        else if (ci.fields.items.len > 0)
-        {
-            try writer.writeAll ("{");
-            var count : usize = 0;
-            for (ci.fields.items) |field|
-            {
-                if (count > 0) try writer.writeAll (", ");
+    fn serialize_value(self: World, ci: *TypeInfo(u8), value: []const u8, writer: anytype) !void {
+        if (ci.self == self.f32) {
+            const data: *const f32 = @alignCast(@ptrCast(value.ptr));
+            try writer.print("{d:0.6}", .{data.*});
+        } else if (ci.self == self.String) {
+            const data: *const String = @alignCast(@ptrCast(value.ptr));
+            try writer.print("{'}", .{data.*});
+        } else if (ci.fields.items.len > 0) {
+            try writer.writeAll("{");
+            var count: usize = 0;
+            for (ci.fields.items) |field| {
+                if (count > 0) try writer.writeAll(", ");
 
                 const start_index = field.offset / 8;
                 const end_index = start_index + field.size / 8;
 
-                const part = value[start_index .. end_index];
+                const part = value[start_index..end_index];
 
-                if (self.get_type_info (field.kind)) |field_ci|
-                {
-                    try self.serialize_value (field_ci, part, writer);
-                }
-                else
-                {
-                    try writer.print ("{any}", .{part});
+                if (self.get_type_info(field.kind)) |field_ci| {
+                    try self.serialize_value(field_ci, part, writer);
+                } else {
+                    try writer.print("{any}", .{part});
                 }
                 count += 1;
             }
-            try writer.writeAll ("}");
-        }
-        else
-        {
-            try writer.print ("{any}", .{value});
+            try writer.writeAll("}");
+        } else {
+            try writer.print("{any}", .{value});
         }
     }
 
@@ -687,7 +671,7 @@ pub const World = struct {
                         .generation = ed.generation,
                     };
                     try writer.print("\n    {}", .{e});
-                    if (self.entity_labels.get(e.index)) |label| {
+                    if (self.get_label(e)) |label| {
                         try writer.print(" {'}", .{label});
                     }
                     if (ed.immortal) {
@@ -696,12 +680,19 @@ pub const World = struct {
                 }
             }
         }
-        try writer.print("\n  Components {}", .{self.components.count ()});
-        var component_iterator = self.components.iterator ();
-        while (component_iterator.next ()) |com|
-        {
-            const ci : *TypeInfo(void) = @ptrFromInt (com.key_ptr.*);
-            try writer.print ("\n    {} {?'} {{{} bytes}} {} {}", .{ci.name, ci.label, ci.size, com.value_ptr.*, ci.len,});
+        try writer.print("\n  Components {}", .{self.components.count()});
+        var component_iterator = self.components.iterator();
+        while (component_iterator.next()) |com| {
+            const ci: *TypeInfo(void) = @ptrFromInt(com.key_ptr.*);
+            try writer.print("\n    {}", .{ci.name});
+            if (ci.label) |label| {
+                try writer.print(" {'}", .{label});
+            }
+            try writer.print(" {{{} bytes}} {} {}", .{
+                ci.size,
+                com.value_ptr.*,
+                ci.len,
+            });
             for (ci.fields.items) |field| {
                 try writer.print("\n      .{s}", .{field.name});
                 if (field.value) |value| {
@@ -715,22 +706,20 @@ pub const World = struct {
                             try writer.writeAll("[]");
                         }
                     }
-                    if (self.get_type_info (field.kind)) |field_ci|
-                    {
+                    if (self.get_type_info(field.kind)) |field_ci| {
                         try writer.print("{}", .{field_ci.name});
                     }
                     try writer.print(" ({}:{})", .{ field.offset, field.size });
                 }
             }
-            var index_iterator = ci.indexes.iterator ();
-            while (index_iterator.next ()) |item|
-            {
+            var index_iterator = ci.indexes.iterator();
+            while (index_iterator.next()) |item| {
                 const ed = self.generations.items[item.key_ptr.*];
                 const entity = EntityId{
                     .index = ed.index,
                     .generation = ed.generation,
                 };
-                try writer.print ("\n      {} = {}", .{entity, item.value_ptr.*});
+                try writer.print("\n      {} = {}", .{ entity, item.value_ptr.* });
             }
         }
     }

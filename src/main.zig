@@ -164,80 +164,20 @@ pub fn main() !void {
     const player = world.create();
     player.set_label(intern("Player"));
     player.set(Position{ .x = 4, .y = 1 });
-    player.set(Position{ .x = 5, .y = 1 });
 
-    world.step(1);
+    const other = world.create();
+    other.set_label(intern("Other"));
+    other.set(Position{ .x = 2, .y = 3 });
 
-    {
-        const pos = player.get(Position);
-        const vel = player.get(Velocity);
-        std.debug.print("{}\n pos = {?}\n vel = {?}\n", .{ player, pos, vel });
-    }
+    var buffer = std.ArrayList(u8).init(state.allocator);
+    defer buffer.deinit();
+    const writer = buffer.writer();
 
-    if (true)
-    {
-        const ent = world.create();
-        ent.set_label(intern("Other"));
-        ent.set(Velocity{ .dx = 1 });
-        ent.set(Position{ .x = 2, .y = 5 });
-        ent.set(Velocity{ .dx = 2 });
-
-        world.step(1);
-
-        {
-            const pos = ent.get(Position);
-            const vel = ent.get(Velocity);
-            std.debug.print("{}\n pos = {?}\n vel = {?}\n", .{ ent, pos, vel });
-        }
-    }
-
-    if (true)
-    {
-        const ent = world.create();
-        ent.set_label(intern("Wibble"));
-        ent.set(Velocity{ .dx = 1 });
-
-        world.step(1);
-
-        {
-            const pos = ent.get(Position);
-            const vel = ent.get(Velocity);
-            std.debug.print("{}\n pos = {?}\n vel = {?}\n", .{ ent, pos, vel });
-        }
-    }
-
-    if (true)
-    {
-        const ent = world.create();
-        ent.set_label(intern("Stuff"));
-        ent.set(Position{ .x = 2, .y = 5 });
-
-        world.step(1);
-
-        {
-            const pos = ent.get(Position);
-            const vel = ent.get(Velocity);
-            std.debug.print("{}\n pos = {?}\n vel = {?}\n", .{ ent, pos, vel });
-        }
-    }
-
-    player.set(Position{ .x = 3, .y = 1 });
-    player.set(Velocity{ .dx = 1, .dy = -1 });
-
-    {
-        const pos = player.get(Position);
-        const vel = player.get(Velocity);
-        std.debug.print("{}\n pos = {?}\n vel = {?}\n", .{ player, pos, vel });
-    }
+    try world.serialize(writer);
+    std.debug.print("{s}\n", .{buffer.items});
 
     std.debug.print("{}\n", .{world});
 
-    var buffer = std.ArrayList(u8).init (state.allocator);
-    defer buffer.deinit ();
-    const writer = buffer.writer ();
-
-    try world.serialize (writer);
-    std.debug.print ("{s}\n", .{buffer.items});
     std.process.exit(0);
 
     stbi.init(state.allocator);
