@@ -1,0 +1,6 @@
+{
+    mysnc
+    Memcheck:Param
+    msync(start)
+    fun:msync
+}

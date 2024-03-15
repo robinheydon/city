@@ -184,6 +184,7 @@ pub fn main() !void {
     building.set_component(Owner, .{ .owner = player.id });
 
     const rr = world.create();
+    rr.set_label (intern("Route Request"));
     const route_req = RouteRequest{
         .entity = player.id,
         .source = building.id,
@@ -194,6 +195,13 @@ pub fn main() !void {
     var buffer = std.ArrayList(u8).init(state.allocator);
     defer buffer.deinit();
     const writer = buffer.writer();
+
+    try world.serialize(writer);
+    std.debug.print("{s}\n", .{buffer.items});
+
+    std.debug.print("{}\n", .{world});
+
+    other.destroy ();
 
     try world.serialize(writer);
     std.debug.print("{s}\n", .{buffer.items});
