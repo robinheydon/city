@@ -161,36 +161,31 @@ pub fn main() !void {
 
     random.init();
 
-    var world = try ecs.init(state.allocator);
+    var world = ecs.init(state.allocator);
     defer world.deinit();
 
-    try components.register(&world);
+    components.register(&world);
 
-    const player = world.create();
-    player.set_label(intern("Player's one"));
-    player.set(Position{ .x = 4, .y = 1 });
-    player.set(Velocity{ .dx = 1 });
-    player.set(Person{});
+    const player = world.new();
+    player.set(Position, .{ .x = 4, .y = 1 });
+    player.set(Velocity, .{ .dx = 1 });
 
-    const other = world.create();
-    other.set_label(intern("Other"));
-    other.set(Position{ .x = 2, .y = 3 });
-    other.set(DeadPerson{});
+    const other = world.new();
+    other.set(Position, .{ .x = 2, .y = 3 });
+    other.add(DeadPerson);
 
-    const building = world.create();
-    building.set_label(intern("Building"));
-    building.set(Position{ .x = 8, .y = 0 });
-    building.set(BuildingSize{ .x = 7, .y = 12, .z = 9 });
-    building.set_component(Owner, .{ .owner = player.id });
+    const building = world.new();
+    building.set(Position, .{ .x = 8, .y = 0 });
+    building.set(BuildingSize, .{ .x = 7, .y = 12, .z = 9 });
 
-    const rr = world.create();
-    rr.set_label (intern("Route Request"));
+    const rr = world.new();
+    rr.set_label("Route Request");
     const route_req = RouteRequest{
         .entity = player.id,
         .source = building.id,
         .destination = other.id,
     };
-    rr.set_component(RouteRequest, route_req);
+    rr.set(RouteRequest, route_req);
 
     var buffer = std.ArrayList(u8).init(state.allocator);
     defer buffer.deinit();
@@ -199,14 +194,12 @@ pub fn main() !void {
     try world.serialize(writer);
     std.debug.print("{s}\n", .{buffer.items});
 
-    std.debug.print("{}\n", .{world});
+    // other.delete();
 
-    other.destroy ();
+    // try world.serialize(writer);
+    // std.debug.print("{s}\n", .{buffer.items});
 
-    try world.serialize(writer);
-    std.debug.print("{s}\n", .{buffer.items});
-
-    std.debug.print("{}\n", .{world});
+    // std.debug.print("{}\n", .{world});
 
     std.process.exit(0);
 

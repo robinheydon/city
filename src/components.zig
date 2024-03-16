@@ -189,22 +189,24 @@ pub const DeadPerson = struct {};
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-pub fn register(world: *ecs.World) !void {
-    _ = try world.register_component(Route, "Route");
-    _ = try world.register_component(RouteRequest, "RouteRequest");
-    _ = try world.register_component(Node, "Node");
-    _ = try world.register_component(Link, "Link");
-    _ = try world.register_component(Position, "Position");
-    _ = try world.register_component(Velocity, "Velocity");
-    _ = try world.register_component(Rotation, "Rotation");
-    _ = try world.register_component(BuildingSize, "BuildingSize");
-    _ = try world.register_component(Model, "Model");
-    _ = try world.register_component(LinkLayout, "LinkLayout");
-    _ = try world.register_component(Lane, "Lane");
-    _ = try world.register_component(LaneKind, "LaneKind");
-    _ = try world.register_component(LaneRestriction, "LandRestriction");
-    _ = try world.register_component(DeadPerson, "DeadPerson");
-    _ = try world.register_component(Person, "Person");
+pub fn register(world: *ecs.World) void {
+    world.register_component(Route, "Route");
+    world.register_component(RouteRequest, "RouteRequest");
+    world.register_component(Node, "Node");
+    world.register_component(Link, "Link");
+    world.register_component(Position, "Position");
+    world.register_component(Velocity, "Velocity");
+    world.register_component(Rotation, "Rotation");
+    world.register_component(BuildingSize, "BuildingSize");
+    world.register_component(Model, "Model");
+    world.register_component(LinkLayout, "LinkLayout");
+    world.register_component(Lane, "Lane");
+    world.register_component(LaneKind, "LaneKind");
+    world.register_component(LaneRestriction, "LandRestriction");
+    world.register_component(Owner, "Owner");
+
+    world.register_tag(DeadPerson, "DeadPerson");
+    world.register_tag(Person, "Person");
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
