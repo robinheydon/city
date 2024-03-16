@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const zflecs = @import("zflecs");
 const zglfw = @import("zglfw");
 const zgui = @import("zgui");
 const zmath = @import("zmath");
@@ -18,6 +19,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const zflecs_pkg = zflecs.package(b, target, optimize, .{});
     const zglfw_pkg = zglfw.package(b, target, optimize, .{});
     const zgui_pkg = zgui.package(b, target, optimize, .{
         .options = .{
@@ -33,6 +35,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    zflecs_pkg.link(exe);
     zglfw_pkg.link(exe);
     zgui_pkg.link(exe);
     zmath_pkg.link(exe);
