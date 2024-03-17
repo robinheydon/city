@@ -169,6 +169,15 @@ pub fn main() !void {
     const player = world.new();
     player.set(Position, .{ .x = 4, .y = 1 });
     player.set(Velocity, .{ .dx = 1 });
+    player.set_label("Bob");
+
+    const player2 = world.new();
+    player2.set(Position, .{ .x = 4, .y = 2 });
+    player2.set(Velocity, .{ .dx = 2 });
+
+    const player3 = world.new();
+    player3.set(Position, .{ .x = 4, .y = 1 });
+    player3.set(Velocity, .{ .dx = 3 });
 
     const other = world.new();
     other.set(Position, .{ .x = 2, .y = 3 });
