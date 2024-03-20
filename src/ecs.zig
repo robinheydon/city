@@ -14,9 +14,8 @@ pub const EntityId = ecs.entity_t;
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 pub fn init(allocator: std.mem.Allocator) World {
-    _ = allocator;
-
-    const world = ecs.init();
+    _ = ecs.log_set_level(-1);
+    const world = ecs.init(allocator);
     return .{
         .world = world,
     };
@@ -43,9 +42,9 @@ pub const Entity = struct {
         if (entity_id == 0) {
             std.debug.print("unregistered {s}\n", .{@typeName(T)});
             if (@sizeOf(T) == 0) {
-                ecs.tag(self.world, T);
+                ecs.TAG(self.world, T);
             } else {
-                ecs.component(self.world, T);
+                ecs.COMPONENT(self.world, T);
             }
         }
         ecs.add(self.world, self.id, T);
@@ -57,7 +56,7 @@ pub const Entity = struct {
         const entity_id = ecs.id(T);
         if (entity_id == 0) {
             std.debug.print("unregistered {s}\n", .{@typeName(T)});
-            ecs.component(self.world, T);
+            ecs.COMPONENT(self.world, T);
         }
         _ = ecs.set(self.world, self.id, T, val);
     }
@@ -78,21 +77,20 @@ pub const World = struct {
 
     ////////////////////////////////////////
 
-    pub fn deinit (self: *World) void
-    {
-        _ = ecs.fini (self.world);
+    pub fn deinit(self: *World) void {
+        _ = ecs.fini(self.world);
     }
 
     ////////////////////////////////////////
 
     pub fn register_component(self: *World, comptime T: type, name: [:0]const u8) void {
-        ecs.component_named(self.world, T, name);
+        ecs.componentWithOptions(self.world, T, .{ .name = name, .symbol = name });
     }
 
     ////////////////////////////////////////
 
     pub fn register_tag(self: *World, comptime T: type, name: [:0]const u8) void {
-        ecs.tag_named(self.world, T, name);
+        ecs.tagWithOptions(self.world, T, .{ .name = name });
     }
 
     ////////////////////////////////////////
@@ -108,13 +106,13 @@ pub const World = struct {
     ////////////////////////////////////////
 
     pub fn serialize(self: World, writer: anytype) !void {
-        try writer.print ("World {*}\n", .{self.world});
+        try writer.print("World {*}\n", .{self.world});
         var filter: ecs.filter_t = .{};
-        var filter_desc = ecs.filter_desc_t {
+        var filter_desc = ecs.filter_desc_t{
             .storage = &filter,
         };
 
-        filter_desc.terms[0].id = ecs.pair (ecs.ChildOf, ecs.Flecs);
+        filter_desc.terms[0].id = ecs.pair(ecs.ChildOf, ecs.Flecs);
         filter_desc.terms[0].oper = .Not;
         filter_desc.terms[0].src.flags = ecs.Self | ecs.Parent;
 
@@ -122,130 +120,103 @@ pub const World = struct {
         filter_desc.terms[1].oper = .Not;
         filter_desc.terms[1].src.flags = ecs.Self | ecs.Parent;
 
-        _ = try ecs.filter_init (self.world, &filter_desc);
+        filter_desc.terms[2].id = ecs.Component;
+        filter_desc.terms[2].oper = .Not;
+        filter_desc.terms[2].src.flags = ecs.Self | ecs.Parent;
 
-        var iter = ecs.filter_iter (self.world, &filter);
-        while (ecs.iter_next (&iter))
-        {
-            const table_type = ecs.table_get_type (iter.table);
-            try writer.writeAll ("Table ");
-            for (0..@intCast (table_type.count)) |i|
-            {
-                if (i > 0)
-                {
-                    try writer.writeAll (", ");
+        _ = try ecs.filter_init(self.world, &filter_desc);
+
+        var iter = ecs.filter_iter(self.world, &filter);
+        while (ecs.iter_next(&iter)) {
+            const table_type = ecs.table_get_type(iter.table);
+            try writer.writeAll("Table ");
+            for (0..@intCast(table_type.count)) |i| {
+                if (i > 0) {
+                    try writer.writeAll(", ");
                 }
                 const id = table_type.array[i];
-                if (ecs.id_is_pair (id))
-                {
-                    const first = ecs.pair_first (id);
-                    const second = ecs.pair_second (id);
-                    try writer.writeAll ("(");
-                    if (ecs.get_name (self.world, first)) |name|
-                    {
-                        try writer.print ("{s}", .{name});
+                if (ecs.id_is_pair(id)) {
+                    const first = ecs.pair_first(id);
+                    const second = ecs.pair_second(id);
+                    try writer.writeAll("(");
+                    if (ecs.get_name(self.world, first)) |name| {
+                        try writer.print("{s}", .{name});
+                    } else {
+                        try writer.print("{x:0>8}", .{id});
                     }
-                    else
-                    {
-                        try writer.print ("{x:0>8}", .{id});
+                    try writer.writeAll(",");
+                    if (ecs.get_name(self.world, second)) |name| {
+                        try writer.print("{s}", .{name});
+                    } else {
+                        try writer.print("{x:0>8}", .{id});
                     }
-                    try writer.writeAll (",");
-                    if (ecs.get_name (self.world, second)) |name|
-                    {
-                        try writer.print ("{s}", .{name});
-                    }
-                    else
-                    {
-                        try writer.print ("{x:0>8}", .{id});
-                    }
-                    try writer.writeAll (")");
-                }
-                else
-                {
-                    if (ecs.get_name (self.world, id)) |name|
-                    {
-                        try writer.print ("{s}", .{name});
-                    }
-                    else
-                    {
-                        try writer.print ("{x:0>8}", .{id});
+                    try writer.writeAll(")");
+                } else {
+                    if (ecs.get_name(self.world, id)) |name| {
+                        try writer.print("{s}", .{name});
+                    } else {
+                        try writer.print("{x:0>8}", .{id});
                     }
                 }
             }
-            const count : usize = @intCast (ecs.table_column_count (iter.table));
-            try writer.writeAll ("\n");
-            for (0..@intCast (iter.count_)) |i|
-            {
-                for (0..count) |j|
-                {
-                    const k : usize = @intCast (ecs.table_column_to_type_index (iter.table, @intCast (j)));
+            const count: usize = @intCast(ecs.table_column_count(iter.table));
+            try writer.writeAll("\n");
+            for (0..@intCast(iter.count_)) |i| {
+                for (0..count) |j| {
+                    const k: usize = @intCast(ecs.table_column_to_type_index(iter.table, @intCast(j)));
                     const id = table_type.array[k];
-                    const s = ecs.table_get_column_size (iter.table, @intCast (j));
-                    const ptr = ecs.table_get_column (iter.table, @intCast (j), @intCast (i));
-                    const data : [*]u8 = @ptrCast (ptr);
-                    try writer.print ("  {x:0>8} ", .{iter.entities_[i]});
-                    if (ecs.id_is_pair (id))
-                    {
-                        const first = ecs.pair_first (id);
-                        const second = ecs.pair_second (id);
-                        try writer.writeAll ("(");
-                        if (ecs.get_name (self.world, first)) |name|
-                        {
-                            try writer.print ("{s}", .{name});
+                    const s = ecs.table_get_column_size(iter.table, @intCast(j));
+                    const ptr = ecs.table_get_column(iter.table, @intCast(j), @intCast(i));
+                    const data: [*]u8 = @ptrCast(ptr);
+                    try writer.print("  {x:0>8} ", .{iter.entities_[i]});
+                    if (ecs.id_is_pair(id)) {
+                        const first = ecs.pair_first(id);
+                        const second = ecs.pair_second(id);
+                        try writer.writeAll("(");
+                        if (ecs.get_name(self.world, first)) |name| {
+                            try writer.print("{s}", .{name});
+                        } else {
+                            try writer.print("{x:0>8}", .{id});
                         }
-                        else
-                        {
-                            try writer.print ("{x:0>8}", .{id});
+                        try writer.writeAll(",");
+                        if (ecs.get_name(self.world, second)) |name| {
+                            try writer.print("{s}", .{name});
+                        } else {
+                            try writer.print("{x:0>8}", .{id});
                         }
-                        try writer.writeAll (",");
-                        if (ecs.get_name (self.world, second)) |name|
-                        {
-                            try writer.print ("{s}", .{name});
-                        }
-                        else
-                        {
-                            try writer.print ("{x:0>8}", .{id});
-                        }
-                        try writer.writeAll (")");
-                    }
-                    else
-                    {
-                        if (ecs.get_name (self.world, id)) |name|
-                        {
-                            try writer.print ("{s}", .{name});
-                        }
-                        else
-                        {
-                            try writer.print ("{x:0>8}", .{id});
+                        try writer.writeAll(")");
+                    } else {
+                        if (ecs.get_name(self.world, id)) |name| {
+                            try writer.print("{s}", .{name});
+                        } else {
+                            try writer.print("{x:0>8}", .{id});
                         }
                     }
-                    const first = ecs.pair_first (id);
-                    if (first == ecs.Identifier)
-                    {
-                        const ident : *ecs.identifier_t = @alignCast (@ptrCast (data));
-                        const str: []u8 = ident.value[0..@intCast (ident.length)];
-                        try writer.print ("\n      '{'}'", .{std.zig.fmtEscapes (str)});
-                    }
-                    else
-                    {
-                        for (0..s) |l|
-                        {
-                            if (l % 16 == 0)
-                            {
-                                try writer.writeAll ("\n     ");
+                    const first = ecs.pair_first(id);
+                    if (first == ecs.Identifier) {
+                        const ident: *ecs.identifier_t = @alignCast(@ptrCast(data));
+                        const str: []u8 = ident.value[0..@intCast(ident.length)];
+                        try writer.print("\n      '{'}'", .{std.zig.fmtEscapes(str)});
+                    } else if (first == ecs.Description) {
+                        const desc: *ecs.description_t = @alignCast(@ptrCast(data));
+                        const str: []const u8 = std.mem.span(desc.value);
+                        try writer.print("\n      '{'}'", .{std.zig.fmtEscapes(str)});
+                    } else if (id == ecs.Component) {
+                        const desc: *ecs.component_t = @alignCast(@ptrCast(data));
+                        try writer.print("\n      .size = {}, .alignment = {}", .{ desc.size, desc.alignment });
+                    } else {
+                        for (0..s) |l| {
+                            if (l % 16 == 0) {
+                                try writer.writeAll("\n     ");
+                            } else if (l % 16 == 8) {
+                                try writer.writeAll("  ");
+                            } else if (l % 8 == 4) {
+                                try writer.writeAll(" ");
                             }
-                            else if (l % 16 == 8)
-                            {
-                                try writer.writeAll ("  ");
-                            }
-                            else if (l % 8 == 4)
-                            {
-                                try writer.writeAll (" ");
-                            }
-                            try writer.print (" {x:0>2}", .{data[l]});
+                            try writer.print(" {x:0>2}", .{data[l]});
                         }
                     }
-                    try writer.writeAll ("\n");
+                    try writer.writeAll("\n");
                 }
             }
         }

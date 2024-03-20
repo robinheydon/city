@@ -210,137 +210,137 @@ pub fn main() !void {
 
     // std.debug.print("{}\n", .{world});
 
-    std.process.exit(0);
+    if (false) {
+        stbi.init(state.allocator);
+        defer stbi.deinit();
 
-    stbi.init(state.allocator);
-    defer stbi.deinit();
+        try terrain.init_height_map();
 
-    try terrain.init_height_map();
+        try glfw.init();
+        defer glfw.terminate();
 
-    try glfw.init();
-    defer glfw.terminate();
+        const gl_major = 4;
+        const gl_minor = 3;
 
-    const gl_major = 4;
-    const gl_minor = 3;
+        glfw.windowHintTyped(.context_version_major, gl_major);
+        glfw.windowHintTyped(.context_version_minor, gl_minor);
+        glfw.windowHintTyped(.opengl_profile, .opengl_core_profile);
+        glfw.windowHintTyped(.opengl_forward_compat, true);
+        glfw.windowHintTyped(.opengl_debug_context, true);
+        glfw.windowHintTyped(.client_api, .opengl_api);
+        glfw.windowHintTyped(.red_bits, 8);
+        glfw.windowHintTyped(.green_bits, 8);
+        glfw.windowHintTyped(.blue_bits, 8);
+        glfw.windowHintTyped(.depth_bits, 24);
+        glfw.windowHintTyped(.doublebuffer, true);
+        glfw.windowHintTyped(.samples, 8);
 
-    glfw.windowHintTyped(.context_version_major, gl_major);
-    glfw.windowHintTyped(.context_version_minor, gl_minor);
-    glfw.windowHintTyped(.opengl_profile, .opengl_core_profile);
-    glfw.windowHintTyped(.opengl_forward_compat, true);
-    glfw.windowHintTyped(.opengl_debug_context, true);
-    glfw.windowHintTyped(.client_api, .opengl_api);
-    glfw.windowHintTyped(.red_bits, 8);
-    glfw.windowHintTyped(.green_bits, 8);
-    glfw.windowHintTyped(.blue_bits, 8);
-    glfw.windowHintTyped(.depth_bits, 24);
-    glfw.windowHintTyped(.doublebuffer, true);
-    glfw.windowHintTyped(.samples, 8);
+        state.main_window = try glfw.Window.create(1280, 720, "City", null);
+        defer state.main_window.destroy();
 
-    state.main_window = try glfw.Window.create(1280, 720, "City", null);
-    defer state.main_window.destroy();
+        glfw.makeContextCurrent(state.main_window);
 
-    glfw.makeContextCurrent(state.main_window);
+        try opengl.loadCoreProfile(glfw.getProcAddress, gl_major, gl_minor);
 
-    try opengl.loadCoreProfile(glfw.getProcAddress, gl_major, gl_minor);
+        gl.debugMessageCallback(opengl_debug_message, null);
+        gl.enable(gl.DEBUG_OUTPUT);
 
-    gl.debugMessageCallback(opengl_debug_message, null);
-    gl.enable(gl.DEBUG_OUTPUT);
+        glfw.swapInterval(1);
 
-    glfw.swapInterval(1);
+        gl.clearColor(0.4, 0.4, 0.4, 1.0);
+        gl.clearDepth(1.0);
+        gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
+        state.main_window.swapBuffers();
 
-    gl.clearColor(0.4, 0.4, 0.4, 1.0);
-    gl.clearDepth(1.0);
-    gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
-    state.main_window.swapBuffers();
+        _ = state.main_window.setKeyCallback(on_key);
+        _ = state.main_window.setCharCallback(on_char);
+        _ = state.main_window.setCursorPosCallback(on_mouse_move);
 
-    _ = state.main_window.setKeyCallback(on_key);
-    _ = state.main_window.setCharCallback(on_char);
-    _ = state.main_window.setCursorPosCallback(on_mouse_move);
+        ui.init(state.allocator);
+        defer ui.deinit();
 
-    ui.init(state.allocator);
-    defer ui.deinit();
+        ui.backend.init(state.main_window);
+        defer ui.backend.deinit();
 
-    ui.backend.init(state.main_window);
-    defer ui.backend.deinit();
+        _ = ui.io.addFontFromMemory(fonts.body_font, 24);
 
-    _ = ui.io.addFontFromMemory(fonts.body_font, 24);
+        ui.getStyle().scaleAllSizes(1);
 
-    ui.getStyle().scaleAllSizes(1);
+        state.target_x = default_map_x;
+        state.target_y = default_map_y;
+        state.camera_yaw = default_camera_yaw;
+        state.camera_pitch = default_camera_pitch;
+        state.camera_zoom = default_camera_zoom;
 
-    state.target_x = default_map_x;
-    state.target_y = default_map_y;
-    state.camera_yaw = default_camera_yaw;
-    state.camera_pitch = default_camera_pitch;
-    state.camera_zoom = default_camera_zoom;
+        try create_shaders();
 
-    try create_shaders();
+        try create_axes();
+        defer state.axes.deinit();
 
-    try create_axes();
-    defer state.axes.deinit();
+        gl.enable(gl.CULL_FACE);
+        gl.cullFace(gl.BACK);
+        gl.frontFace(gl.CW);
+        gl.depthFunc(gl.LEQUAL);
+        gl.enable(gl.DEPTH_TEST);
+        gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
 
-    gl.enable(gl.CULL_FACE);
-    gl.cullFace(gl.BACK);
-    gl.frontFace(gl.CW);
-    gl.depthFunc(gl.LEQUAL);
-    gl.enable(gl.DEPTH_TEST);
-    gl.polygonMode(gl.FRONT_AND_BACK, gl.FILL);
+        state.fade_to_color[0] = 0.40;
+        state.fade_to_color[1] = 0.40;
+        state.fade_to_color[2] = 0.40;
 
-    state.fade_to_color[0] = 0.40;
-    state.fade_to_color[1] = 0.40;
-    state.fade_to_color[2] = 0.40;
+        try terrain.init();
+        defer terrain.deinit();
 
-    try terrain.init();
-    defer terrain.deinit();
+        main_start_zone.End();
 
-    main_start_zone.End();
+        reset_delta_time();
 
-    reset_delta_time();
+        while (state.running) {
+            tracy.FrameMark();
 
-    while (state.running) {
-        tracy.FrameMark();
+            if (state.main_window.shouldClose()) {
+                state.running = false;
+            }
 
-        if (state.main_window.shouldClose()) {
-            state.running = false;
+            update_delta_time();
+
+            {
+                const zone = tracy.ZoneNC(@src(), "gl.viewport", 0x00_80_80_80);
+                defer zone.End();
+
+                const fb_size = state.main_window.getFramebufferSize();
+                state.width = fb_size[0];
+                state.height = fb_size[1];
+
+                gl.viewport(0, 0, state.width, state.height);
+            }
+
+            {
+                const zone = tracy.ZoneNC(@src(), "gl.clear", 0x00_80_80_80);
+                defer zone.End();
+
+                gl.clearColor(0.4, 0.4, 0.4, 1.0);
+                gl.clearDepth(1.0);
+                gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
+            }
+
+            begin_3d();
+
+            draw_axes();
+            draw_terrain();
+
+            draw_ui();
+            draw_frame_times();
+
+            {
+                const zone = tracy.ZoneNC(@src(), "swapBuffers", 0x00_00_ff_00);
+                defer zone.End();
+                state.main_window.swapBuffers();
+            }
+
+            process_events();
+            update_camera();
         }
-
-        update_delta_time();
-
-        {
-            const zone = tracy.ZoneNC(@src(), "gl.viewport", 0x00_80_80_80);
-            defer zone.End();
-
-            const fb_size = state.main_window.getFramebufferSize();
-            state.width = fb_size[0];
-            state.height = fb_size[1];
-
-            gl.viewport(0, 0, state.width, state.height);
-        }
-
-        {
-            const zone = tracy.ZoneNC(@src(), "gl.clear", 0x00_80_80_80);
-            defer zone.End();
-
-            gl.clearColor(0.4, 0.4, 0.4, 1.0);
-            gl.clearDepth(1.0);
-            gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
-        }
-
-        begin_3d();
-
-        draw_axes();
-        draw_terrain();
-
-        draw_ui();
-        draw_frame_times();
-
-        {
-            const zone = tracy.ZoneNC(@src(), "swapBuffers", 0x00_00_ff_00);
-            defer zone.End();
-            state.main_window.swapBuffers();
-        }
-
-        process_events();
-        update_camera();
     }
 }
 
