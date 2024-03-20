@@ -137,6 +137,39 @@ pub var state: State = .{};
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
+pub fn movement_system(positions: []Position, velocities: []const Velocity, iter: *ecs.Iter) void {
+    for (positions, velocities) |*p, v| {
+        std.debug.print("p={} v={} => ", .{ p, v });
+        p.x += v.dx * iter.delta_time;
+        p.y += v.dy * iter.delta_time;
+        p.z += v.dz * iter.delta_time;
+        std.debug.print("p={}\n", .{ p });
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+pub fn draw_system(positions: []Position, iter: *ecs.Iter) void {
+    _ = iter;
+    for (positions) |p| {
+        std.debug.print("p={}\n", .{p});
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+pub fn time_system(iter: *ecs.Iter) void {
+    std.debug.print("dt={d}\n", .{iter.delta_time});
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
 pub fn main() !void {
     const main_zone = tracy.ZoneNC(@src(), "main", 0x00_80_80_80);
     defer main_zone.End();
@@ -146,14 +179,16 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.debug.assert(gpa.deinit() == .ok);
 
-    var tracy_allocator = tracy.TracyAllocator{ .child_allocator = gpa.allocator() };
+    // var tracy_allocator = tracy.TracyAllocator{ .child_allocator = gpa.allocator() };
 
-    if (false) {
-        var logging_allocator = std.heap.loggingAllocator(tracy_allocator.allocator());
-        state.allocator = logging_allocator.allocator();
-    } else {
-        state.allocator = tracy_allocator.allocator();
-    }
+    // if (false) {
+        // var logging_allocator = std.heap.loggingAllocator(tracy_allocator.allocator());
+        // state.allocator = logging_allocator.allocator();
+    // } else {
+        // state.allocator = tracy_allocator.allocator();
+    // }
+
+    state.allocator = gpa.allocator ();
 
     std.debug.print("City\n", .{});
     std.debug.print("  cpus = {}\n", .{try std.Thread.getCpuCount()});
@@ -165,6 +200,10 @@ pub fn main() !void {
     defer world.deinit();
 
     components.register(&world);
+
+    world.register_system("movement_system", movement_system, .{});
+    world.register_system("draw_system", draw_system, .{});
+    world.register_system("time_system", time_system, .{});
 
     const player = world.new();
     player.set(Position, .{ .x = 4, .y = 1 });
@@ -195,6 +234,11 @@ pub fn main() !void {
         .destination = other.id,
     };
     rr.set(RouteRequest, route_req);
+
+    std.debug.print("Progress\n", .{});
+    world.progress(1.0);
+    std.debug.print("Progress\n", .{});
+    world.progress(1.0);
 
     var buffer = std.ArrayList(u8).init(state.allocator);
     defer buffer.deinit();

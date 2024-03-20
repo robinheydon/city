@@ -9,6 +9,8 @@ pub const version = std.SemanticVersion{ .major = 3, .minor = 2, .patch = 7 };
 
 pub const EntityId = ecs.entity_t;
 
+pub const Iter = ecs.iter_t;
+
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -20,6 +22,10 @@ pub fn init(allocator: std.mem.Allocator) World {
         .world = world,
     };
 }
+
+pub const Phase = enum {
+    OnUpdate,
+};
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -105,6 +111,138 @@ pub const World = struct {
 
     ////////////////////////////////////////
 
+    pub const SystemOptions = struct {
+        phase: Phase = .OnUpdate,
+        interval: f32 = 0,
+    };
+
+    pub fn system_callback1(iter: *ecs.iter_t) callconv(.C) void {
+        std.debug.print("System Callback0 {}\n", .{iter.count_});
+        const func : *const fn (iter: *ecs.iter_t) void = @ptrCast (iter.ctx);
+        func (iter);
+    }
+
+    pub fn system_callback2(iter: *ecs.iter_t) callconv(.C) void {
+        std.debug.print("System Callback1 {}\n", .{iter.count_});
+        const func : *const fn (c1: []u8, iter: *ecs.iter_t) void = @ptrCast (iter.ctx);
+        const s1 = ecs.field_size (iter, 1);
+        var p1 : []u8 = undefined;
+        p1.ptr = @ptrCast (ecs.field_w_size (iter, s1, 1).?);
+        p1.len = @intCast (iter.count_);
+        func (p1, iter);
+    }
+
+    pub fn system_callback3(iter: *ecs.iter_t) callconv(.C) void {
+        std.debug.print("System Callback2 {}\n", .{iter.count_});
+        const func : *const fn (c1: []u8, c2: []u8, iter: *ecs.iter_t) void = @ptrCast (iter.ctx);
+        const s1 = ecs.field_size (iter, 1);
+        const s2 = ecs.field_size (iter, 2);
+        var p1 : []u8 = undefined;
+        var p2 : []u8 = undefined;
+        p1.ptr = @ptrCast (ecs.field_w_size (iter, s1, 1).?);
+        p1.len = @intCast (iter.count_);
+        p2.ptr = @ptrCast (ecs.field_w_size (iter, s2, 2).?);
+        p2.len = @intCast (iter.count_);
+        func (p1, p2, iter);
+    }
+
+    pub fn system_callback4(iter: *ecs.iter_t) callconv(.C) void {
+        std.debug.print("System Callback3 {}\n", .{iter.count_});
+    }
+
+    pub fn system_callback5(iter: *ecs.iter_t) callconv(.C) void {
+        std.debug.print("System Callback4 {}\n", .{iter.count_});
+    }
+
+    pub fn register_system(
+        self: *World,
+        name: [*:0]const u8,
+        func: anytype,
+        options: SystemOptions,
+    ) void {
+        const ecs_phase = switch (options.phase) {
+            .OnUpdate => ecs.OnUpdate,
+        };
+        var desc = ecs.system_desc_t{
+            .interval = options.interval,
+            .ctx = @constCast (@ptrCast (&func)),
+        };
+
+        const func_type_info = @typeInfo(@TypeOf(func));
+        if (func_type_info != .Fn) {
+            @compileError("Function expected, found " ++ @typeName(@TypeOf(func)));
+        }
+
+        std.debug.print("func is func\n", .{});
+        const func_info = func_type_info.Fn;
+        std.debug.assert(func_info.is_var_args == false);
+        std.debug.assert(func_info.is_generic == false);
+        std.debug.assert(func_info.return_type != null);
+        std.debug.assert(func_info.return_type == void);
+        std.debug.print("params.len = {}\n", .{func_info.params.len});
+
+        switch (func_info.params.len)
+        {
+            0 => @compileError ("No iter parameter"),
+            1 => desc.callback = system_callback1,
+            2 => desc.callback = system_callback2,
+            3 => desc.callback = system_callback3,
+            4 => desc.callback = system_callback4,
+            5 => desc.callback = system_callback5,
+            else => @compileError("Too many parameters in function - this can be fixed"),
+        }
+
+        var has_iter = false;
+        var iter_is_last = false;
+
+        inline for (func_info.params, 0..) |param, i| {
+            std.debug.print("{}\n", .{param});
+
+            const param_type = param.type.?;
+            const param_type_info = @typeInfo(param_type);
+
+            iter_is_last = false;
+            if (param_type_info == .Pointer) {
+                const pointer = param_type_info.Pointer;
+
+                if (pointer.size == .One and pointer.child == ecs.iter_t) {
+                    if (has_iter) {
+                        // @compileError ("Function has too many *iter parameters");
+                        std.debug.print("too many iter parameters\n", .{});
+                    }
+                    has_iter = true;
+                    iter_is_last = true;
+                } else if (pointer.size == .Slice) {
+                    desc.query.filter.terms[i].id = ecs.id(pointer.child);
+                    desc.query.filter.terms[i].inout = if (pointer.is_const) .In else .InOut;
+                }
+            } else {
+                std.debug.print("invalid parameter type\n", .{});
+            }
+        }
+
+        if (!has_iter) {
+            // @compileError ("Function does not have an *iter parameter");
+            std.debug.print("no iter parameters\n", .{});
+        }
+        if (!iter_is_last) {
+            // @compileError ("Function does not have an *iter parameter as the last parameter");
+            std.debug.print("not last iter parameters\n", .{});
+        }
+
+        std.debug.print("has_iter = {}, iter_is_last = {}\n", .{ has_iter, iter_is_last });
+        std.debug.print("CTX {*}\n", .{name});
+        ecs.systemWithOptions(self.world, name, ecs_phase, func, &desc);
+    }
+
+    ////////////////////////////////////////
+
+    pub fn progress(self: *World, delta_time: f32) void {
+        _ = ecs.progress(self.world, delta_time);
+    }
+
+    ////////////////////////////////////////
+
     pub fn serialize(self: World, writer: anytype) !void {
         try writer.print("World {*}\n", .{self.world});
         var filter: ecs.filter_t = .{};
@@ -123,6 +261,10 @@ pub const World = struct {
         filter_desc.terms[2].id = ecs.Component;
         filter_desc.terms[2].oper = .Not;
         filter_desc.terms[2].src.flags = ecs.Self | ecs.Parent;
+
+        filter_desc.terms[3].id = ecs.System;
+        filter_desc.terms[3].oper = .Not;
+        filter_desc.terms[3].src.flags = ecs.Self | ecs.Parent;
 
         _ = try ecs.filter_init(self.world, &filter_desc);
 

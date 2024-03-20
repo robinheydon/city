@@ -2,3 +2,5 @@ zig-out
 zig-cache
 *.swp
 imgui.ini
+media
+zig-gamedev
