@@ -192,6 +192,8 @@ pub const World = struct {
             else => @compileError("Too many parameters in function - this can be fixed"),
         }
 
+        desc.ctx = @constCast (@ptrCast (&func));
+
         var has_iter = false;
         var iter_is_last = false;
 
@@ -232,7 +234,7 @@ pub const World = struct {
 
         std.debug.print("has_iter = {}, iter_is_last = {}\n", .{ has_iter, iter_is_last });
         std.debug.print("CTX {*}\n", .{name});
-        ecs.systemWithOptions(self.world, name, ecs_phase, func, &desc);
+        ecs.SYSTEM(self.world, name, ecs_phase, &desc);
     }
 
     ////////////////////////////////////////
