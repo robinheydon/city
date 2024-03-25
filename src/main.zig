@@ -179,16 +179,14 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.debug.assert(gpa.deinit() == .ok);
 
-    // var tracy_allocator = tracy.TracyAllocator{ .child_allocator = gpa.allocator() };
+    var tracy_allocator = tracy.TracyAllocator{ .child_allocator = gpa.allocator() };
 
-    // if (false) {
-        // var logging_allocator = std.heap.loggingAllocator(tracy_allocator.allocator());
-        // state.allocator = logging_allocator.allocator();
-    // } else {
-        // state.allocator = tracy_allocator.allocator();
-    // }
-
-    state.allocator = gpa.allocator ();
+    if (false) {
+        var logging_allocator = std.heap.loggingAllocator(tracy_allocator.allocator());
+        state.allocator = logging_allocator.allocator();
+    } else {
+        state.allocator = tracy_allocator.allocator();
+    }
 
     std.debug.print("City\n", .{});
     std.debug.print("  cpus = {}\n", .{try std.Thread.getCpuCount()});
