@@ -1,13 +1,5 @@
 const std = @import("std");
 
-const zflecs = @import("zflecs");
-const zglfw = @import("zglfw");
-const zgui = @import("zgui");
-const zmath = @import("zmath");
-const zopengl = @import("zopengl");
-const zstbi = @import("zstbi");
-const ztracy = @import("ztracy");
-
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -19,29 +11,63 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const zflecs_pkg = zflecs.package(b, target, optimize, .{});
-    const zglfw_pkg = zglfw.package(b, target, optimize, .{});
-    const zgui_pkg = zgui.package(b, target, optimize, .{
-        .options = .{
-            .backend = .glfw_opengl3,
-        },
-    });
-    const zmath_pkg = zmath.package(b, target, optimize, .{});
-    const zopengl_pkg = zopengl.package(b, target, optimize, .{});
-    const zstbi_pkg = zstbi.package(b, target, optimize, .{});
-    const ztracy_pkg = ztracy.package(b, target, optimize, .{
-        .options = .{
-            .enable_ztracy = false,
-        },
-    });
+    exe.linkLibC ();
 
-    zflecs_pkg.link(exe);
-    zglfw_pkg.link(exe);
-    zgui_pkg.link(exe);
-    zmath_pkg.link(exe);
-    zopengl_pkg.link(exe);
-    zstbi_pkg.link(exe);
-    ztracy_pkg.link(exe);
+    // zglfw
+    const zglfw = b.dependency ("zglfw", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport ("zglfw", zglfw.module ("root"));
+    exe.linkLibrary (zglfw.artifact ("glfw"));
+
+    // zgui
+    const zgui = b.dependency ("zgui", .{
+        .target = target,
+        .optimize = optimize,
+        .backend = .glfw_opengl3,
+    });
+    exe.root_module.addImport ("zgui", zgui.module ("root"));
+    exe.linkLibrary (zgui.artifact ("imgui"));
+
+    // zflecs
+    const zflecs = b.dependency ("zflecs", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport ("zflecs", zflecs.module ("root"));
+    exe.linkLibrary (zflecs.artifact ("zflecs"));
+
+    // ztracy
+    const ztracy = b.dependency ("ztracy", .{
+        .target = target,
+        .optimize = optimize,
+        .enable_ztracy = true,
+    });
+    exe.root_module.addImport ("ztracy", ztracy.module ("root"));
+    exe.linkLibrary (ztracy.artifact ("ztracy"));
+
+    // zopengl
+    const zopengl = b.dependency ("zopengl", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport ("zopengl", zopengl.module ("root"));
+
+    // zmath
+    const zmath = b.dependency ("zmath", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport ("zmath", zmath.module ("root"));
+
+    // zstbi
+    const zstbi = b.dependency ("zstbi", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport ("zstbi", zstbi.module ("root"));
+    exe.linkLibrary (zstbi.artifact ("zstbi"));
 
     b.installArtifact(exe);
 

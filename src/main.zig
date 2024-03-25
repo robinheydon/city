@@ -254,7 +254,7 @@ pub fn main() !void {
 
     // std.debug.print("{}\n", .{world});
 
-    if (false) {
+    if (true) {
         stbi.init(state.allocator);
         defer stbi.deinit();
 
@@ -349,8 +349,8 @@ pub fn main() !void {
             update_delta_time();
 
             {
-                const zone = tracy.ZoneNC(@src(), "gl.viewport", 0x00_80_80_80);
-                defer zone.End();
+                // const zone = tracy.ZoneNC(@src(), "gl.viewport", 0x00_80_80_80);
+                // defer zone.End();
 
                 const fb_size = state.main_window.getFramebufferSize();
                 state.width = fb_size[0];
@@ -360,8 +360,8 @@ pub fn main() !void {
             }
 
             {
-                const zone = tracy.ZoneNC(@src(), "gl.clear", 0x00_80_80_80);
-                defer zone.End();
+                // const zone = tracy.ZoneNC(@src(), "gl.clear", 0x00_80_80_80);
+                // defer zone.End();
 
                 gl.clearColor(0.4, 0.4, 0.4, 1.0);
                 gl.clearDepth(1.0);
@@ -377,8 +377,8 @@ pub fn main() !void {
             draw_frame_times();
 
             {
-                const zone = tracy.ZoneNC(@src(), "swapBuffers", 0x00_00_ff_00);
-                defer zone.End();
+                // const zone = tracy.ZoneNC(@src(), "swapBuffers", 0x00_00_ff_00);
+                // defer zone.End();
                 state.main_window.swapBuffers();
             }
 
@@ -406,8 +406,8 @@ fn reset_delta_time() void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn update_delta_time() void {
-    const zone = tracy.ZoneNC(@src(), "update_delta_time", 0x00_ff_00_00);
-    defer zone.End();
+    // const zone = tracy.ZoneNC(@src(), "update_delta_time", 0x00_ff_00_00);
+    // defer zone.End();
 
     const now = std.time.microTimestamp();
     const delta = now - state.last_now;
@@ -594,12 +594,12 @@ fn update_camera() void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn draw_ui() void {
-    const zone = tracy.ZoneNC(@src(), "draw_ui", 0x00_ff_00_00);
-    defer zone.End();
+    // const zone = tracy.ZoneNC(@src(), "draw_ui", 0x00_ff_00_00);
+    // defer zone.End();
 
     {
-        const fb_zone = tracy.ZoneNC(@src(), "ui.backend.newFrame", 0x00800000);
-        defer fb_zone.End();
+        // const fb_zone = tracy.ZoneNC(@src(), "ui.backend.newFrame", 0x00800000);
+        // defer fb_zone.End();
 
         ui.backend.newFrame(@intCast(state.width), @intCast(state.height));
     }
@@ -610,8 +610,8 @@ fn draw_ui() void {
     // ui.showDemoWindow (&state.user_demo_window);
 
     {
-        const draw_zone = tracy.ZoneNC(@src(), "ui.backend.draw", 0x00800000);
-        defer draw_zone.End();
+        // const draw_zone = tracy.ZoneNC(@src(), "ui.backend.draw", 0x00800000);
+        // defer draw_zone.End();
 
         ui.backend.draw();
     }
@@ -622,8 +622,8 @@ fn draw_ui() void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn draw_debug() void {
-    const zone = tracy.ZoneNC(@src(), "draw_debug", 0x00_ff_00_00);
-    defer zone.End();
+    // const zone = tracy.ZoneNC(@src(), "draw_debug", 0x00_ff_00_00);
+    // defer zone.End();
 
     if (state.show_debug) {
         if (ui.begin("Settings", .{})) {
@@ -703,8 +703,8 @@ fn draw_debug() void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn draw_fps() void {
-    const zone = tracy.ZoneNC(@src(), "draw_fps", 0x00_ff_00_00);
-    defer zone.End();
+    // const zone = tracy.ZoneNC(@src(), "draw_fps", 0x00_ff_00_00);
+    // defer zone.End();
 
     if (state.show_fps) {
         ui.setNextWindowSize(.{
@@ -757,8 +757,8 @@ fn draw_frame_times() void {}
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn process_events() void {
-    const events_zone = tracy.ZoneNC(@src(), "process_events", 0x00_ff_00_00);
-    defer events_zone.End();
+    // const events_zone = tracy.ZoneNC(@src(), "process_events", 0x00_ff_00_00);
+    // defer events_zone.End();
 
     state.ui_capture_mouse = ui.io.getWantCaptureMouse();
     state.ui_capture_keyboard = ui.io.getWantCaptureKeyboard();
@@ -780,8 +780,8 @@ fn on_key(
 ) callconv(.C) void {
     _ = scancode;
 
-    const zone = tracy.ZoneNC(@src(), "on_key", 0x00_ff_00_00);
-    defer zone.End();
+    // const zone = tracy.ZoneNC(@src(), "on_key", 0x00_ff_00_00);
+    // defer zone.End();
 
     if (state.ui_capture_keyboard) {
         return;
@@ -817,8 +817,8 @@ fn on_char(window: *glfw.Window, char: u32) callconv(.C) void {
     _ = window;
     _ = char;
 
-    const zone = tracy.ZoneNC(@src(), "on_char", 0x00_ff_00_00);
-    defer zone.End();
+    // const zone = tracy.ZoneNC(@src(), "on_char", 0x00_ff_00_00);
+    // defer zone.End();
 
     if (state.ui_capture_text) {
         return;
@@ -836,8 +836,8 @@ fn on_mouse_move(window: *glfw.Window, x: f64, y: f64) callconv(.C) void {
     _ = x;
     _ = y;
 
-    const zone = tracy.ZoneNC(@src(), "on_mouse_move", 0x00_ff_00_00);
-    defer zone.End();
+    // const zone = tracy.ZoneNC(@src(), "on_mouse_move", 0x00_ff_00_00);
+    // defer zone.End();
 
     if (state.ui_capture_mouse) {
         return;
@@ -850,72 +850,72 @@ fn on_mouse_move(window: *glfw.Window, x: f64, y: f64) callconv(.C) void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-const TracyAllocator = struct {
-    child_allocator: std.mem.Allocator,
-
-    pub fn init(child_allocator: std.mem.Allocator) TracyAllocator {
-        return .{
-            .child_allocator = child_allocator,
-        };
-    }
-
-    pub fn allocator(self: *TracyAllocator) std.mem.Allocator {
-        return .{
-            .ptr = self,
-            .vtable = &.{
-                .alloc = alloc,
-                .resize = resize,
-                .free = free,
-            },
-        };
-    }
-
-    fn alloc(
-        ctx: *anyopaque,
-        len: usize,
-        log2_ptr_align: u8,
-        ra: usize,
-    ) ?[*]u8 {
-        const self: *TracyAllocator = @ptrCast(@alignCast(ctx));
-        const result = self.child_allocator.rawAlloc(len, log2_ptr_align, ra);
-        if (result != null) {
-            tracy.Alloc(result.?, len);
-        }
-        // std.debug.print("Alloc {} : {*}\n", .{ len, result });
-        return result;
-    }
-
-    fn resize(
-        ctx: *anyopaque,
-        buf: []u8,
-        log2_buf_align: u8,
-        new_len: usize,
-        ra: usize,
-    ) bool {
-        const self: *TracyAllocator = @ptrCast(@alignCast(ctx));
-        if (self.child_allocator.rawResize(buf, log2_buf_align, new_len, ra)) {
-            tracy.Free(buf.ptr);
-            tracy.Alloc(buf.ptr, new_len);
-            // std.debug.print("Resize {} : {*} -> {} : {*}\n", .{ buf.len, buf.ptr, new_len, buf.ptr });
-            return true;
-        }
-
-        std.debug.assert(new_len > buf.len);
-        return false;
-    }
-
-    fn free(
-        ctx: *anyopaque,
-        buf: []u8,
-        log2_buf_align: u8,
-        ra: usize,
-    ) void {
-        const self: *TracyAllocator = @ptrCast(@alignCast(ctx));
-        self.child_allocator.rawFree(buf, log2_buf_align, ra);
-        // std.debug.print("Free {} : {*}\n", .{ buf.len, buf.ptr });
-        tracy.Free(buf.ptr);
-    }
-};
+// const TracyAllocator = struct {
+//     child_allocator: std.mem.Allocator,
+// 
+//     pub fn init(child_allocator: std.mem.Allocator) TracyAllocator {
+//         return .{
+//             .child_allocator = child_allocator,
+//         };
+//     }
+// 
+//     pub fn allocator(self: *TracyAllocator) std.mem.Allocator {
+//         return .{
+//             .ptr = self,
+//             .vtable = &.{
+//                 .alloc = alloc,
+//                 .resize = resize,
+//                 .free = free,
+//             },
+//         };
+//     }
+// 
+//     fn alloc(
+//         ctx: *anyopaque,
+//         len: usize,
+//         log2_ptr_align: u8,
+//         ra: usize,
+//     ) ?[*]u8 {
+//         const self: *TracyAllocator = @ptrCast(@alignCast(ctx));
+//         const result = self.child_allocator.rawAlloc(len, log2_ptr_align, ra);
+//         if (result != null) {
+//             tracy.Alloc(result.?, len);
+//         }
+//         // std.debug.print("Alloc {} : {*}\n", .{ len, result });
+//         return result;
+//     }
+// 
+//     fn resize(
+//         ctx: *anyopaque,
+//         buf: []u8,
+//         log2_buf_align: u8,
+//         new_len: usize,
+//         ra: usize,
+//     ) bool {
+//         const self: *TracyAllocator = @ptrCast(@alignCast(ctx));
+//         if (self.child_allocator.rawResize(buf, log2_buf_align, new_len, ra)) {
+//             tracy.Free(buf.ptr);
+//             tracy.Alloc(buf.ptr, new_len);
+//             // std.debug.print("Resize {} : {*} -> {} : {*}\n", .{ buf.len, buf.ptr, new_len, buf.ptr });
+//             return true;
+//         }
+// 
+//         std.debug.assert(new_len > buf.len);
+//         return false;
+//     }
+// 
+//     fn free(
+//         ctx: *anyopaque,
+//         buf: []u8,
+//         log2_buf_align: u8,
+//         ra: usize,
+//     ) void {
+//         const self: *TracyAllocator = @ptrCast(@alignCast(ctx));
+//         self.child_allocator.rawFree(buf, log2_buf_align, ra);
+//         // std.debug.print("Free {} : {*}\n", .{ buf.len, buf.ptr });
+//         tracy.Free(buf.ptr);
+//     }
+// };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -1022,8 +1022,8 @@ fn create_sea() !void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn begin_3d() void {
-    const zone = tracy.ZoneNC(@src(), "begin_3d", 0x00_ff_00_00);
-    defer zone.End();
+    // const zone = tracy.ZoneNC(@src(), "begin_3d", 0x00_ff_00_00);
+    // defer zone.End();
 
     const model = math.identity();
 
@@ -1094,8 +1094,8 @@ fn begin_3d() void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn draw_axes() void {
-    const zone = tracy.ZoneNC(@src(), "draw_axes", 0x00_ff_00_00);
-    defer zone.End();
+    // const zone = tracy.ZoneNC(@src(), "draw_axes", 0x00_ff_00_00);
+    // defer zone.End();
 
     if (state.show_axes) {
         state.basic_shader.use();
@@ -1109,8 +1109,8 @@ fn draw_axes() void {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 fn draw_terrain() void {
-    const zone = tracy.ZoneNC(@src(), "draw_terrain", 0x00_ff_00_00);
-    defer zone.End();
+    // const zone = tracy.ZoneNC(@src(), "draw_terrain", 0x00_ff_00_00);
+    // defer zone.End();
 
     if (!state.show_terrain) {
         return;
@@ -1161,8 +1161,8 @@ fn opengl_debug_message(
     _ = user;
 
     if (severity != gl.DEBUG_SEVERITY_NOTIFICATION) {
-        const zone = tracy.ZoneNC(@src(), "opengl_debug_message", 0x00_ff_00_00);
-        defer zone.End();
+        // const zone = tracy.ZoneNC(@src(), "opengl_debug_message", 0x00_ff_00_00);
+        // defer zone.End();
 
         const slice: []const u8 = message[0..@intCast(len)];
 
@@ -1205,7 +1205,7 @@ fn opengl_debug_message(
         defer state.allocator.free(block);
 
         std.debug.print("{s}\n", .{block});
-        tracy.Message(block);
+        // tracy.Message(block);
     }
 }
 
